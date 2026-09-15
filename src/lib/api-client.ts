@@ -390,16 +390,15 @@ export async function toggleBookmarkPost(postId: string) {
 
 export async function getMyEngagement(postIds: string[]) {
   const userId = me();
-  const ids = dbIds(postIds);
-  if (!isDbId(userId) || ids.length === 0) return { liked: [], reposted: [], bookmarked: [] };
-  postIds = ids;
+  const realIds = dbIds(postIds);
+  if (!isDbId(userId) || realIds.length === 0) return { liked: [], reposted: [], bookmarked: [] };
   const [likes, reposts, bookmarks] = await Promise.all([
-    db.from("likes").select("post_id").eq("user_id", userId).in("post_id", postIds),
-    db.from("reposts").select("post_id").eq("user_id", userId).in("post_id", postIds),
-    db.from("bookmarks").select("post_id").eq("user_id", userId).in("post_id", postIds),
+    db.from("likes").select("post_id").eq("user_id", userId).in("post_id", realIds),
+    db.from("reposts").select("post_id").eq("user_id", userId).in("post_id", realIds),
+    db.from("bookmarks").select("post_id").eq("user_id", userId).in("post_id", realIds),
   ]);
-  const ids = (r: any) => ((r.data ?? []) as any[]).map((x) => String(x.post_id));
-  return { liked: ids(likes), reposted: ids(reposts), bookmarked: ids(bookmarks) };
+  const pick = (r: any) => ((r.data ?? []) as any[]).map((x) => String(x.post_id));
+  return { liked: pick(likes), reposted: pick(reposts), bookmarked: pick(bookmarks) };
 }
 
 
