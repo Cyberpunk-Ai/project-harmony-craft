@@ -47,6 +47,21 @@ function me() {
   return currentUserId || currentUser.id;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Real database rows always carry UUID ids. Sample/demo content shipped with the
+ * app uses readable ids like "post_seed_2", so every query is guarded to avoid
+ * sending those to the database (which rejects them outright).
+ */
+export function isDbId(value: unknown): value is string {
+  return typeof value === "string" && UUID_RE.test(value);
+}
+
+function dbIds(values: unknown[]): string[] {
+  return values.filter(isDbId);
+}
+
 /* ------------------------------------------------------------------ posts */
 
 export function rowToPost(row: any, extras: Partial<Post> = {}): Post {
@@ -149,7 +164,9 @@ export async function getBookmarkedPosts(limit = 50): Promise<Post[]> {
  * the true counts and only their own choice.
  */
 async function hydratePolls(posts: Post[]) {
-  const withPolls = posts.filter((p) => p.poll && (p.poll as any).options?.length);
+  const withPolls = posts.filter(
+    (p) => p.poll && (p.poll as any).options?.length && isDbId(p.id),
+  );
   if (withPolls.length === 0) return;
   const viewer = me();
   const { data } = await db
@@ -455,6 +472,7 @@ export async function getPostComments(postId: string): Promise<PostComment[]> {
 export async function votePoll(postId: string, optionId: string) {
   const userId = me();
   if (!userId || userId === "guest") throw new Error("Sign in to vote");
+  if (!isDbId(postId) || !isDbId(userId)) throw new Error("Voting isn't available on sample posts.");
   const { data: prior } = await db
     .from("poll_votes")
     .select("option_id")
@@ -499,8 +517,9 @@ export async function votePoll(postId: string, optionId: string) {
 }
 
 export async function recordPostImpression(postId: string) {
+  if (!isDbId(postId)) return { viewCount: 0 };
   const userId = me();
-  const viewer = userId && userId !== "guest" ? userId : null;
+  const viewer = isDbId(userId) ? userId : null;
   try {
     // A signed-in person counts once per post; the unique index enforces it.
     // A repeat view is rejected by the unique index; that is expected, not a bug.
@@ -1008,6 +1027,7 @@ export async function terminateSpaceAdmin(spaceId: string, actorId: string) {
 
 export async function getConversations(): Promise<Conversation[]> {
   const userId = me();
+  if (!isDbId(userId)) return [];
   try {
     const { data } = await db
       .from("conversations")
@@ -1072,6 +1092,9 @@ export async function getMessages(conversationId: string): Promise<Message[]> {
 
 export async function getOrCreateConversation(participantId: string): Promise<string> {
   const userId = me();
+  if (!isDbId(userId) || !isDbId(participantId)) {
+    throw new Error("Messaging isn't available for sample accounts.");
+  }
   const { data: existing } = await db
     .from("conversations")
     .select("id")
@@ -1204,6 +1227,7 @@ export async function deleteMessage(messageId: string) {
 
 
 export async function getNotifications(): Promise<Notification[]> {
+  if (!isDbId(me())) return [...SEED_NOTIFICATIONS];
   try {
     const { data } = await db
       .from("notifications")
@@ -1219,7 +1243,9 @@ export async function getNotifications(): Promise<Notification[]> {
 }
 
 export async function markNotificationsRead() {
-  await db.from("notifications").update({ read: true }).eq("recipient_id", me());
+  if (isDbId(me())) {
+    await db.from("notifications").update({ read: true }).eq("recipient_id", me());
+  }
   emitRealtime("notification:read", {});
   return { ok: true };
 }
