@@ -218,7 +218,7 @@ async function hydrateEngagement(posts: Post[]) {
 }
 
 async function hydrateAuthors(ids: string[]) {
-  const unique = Array.from(new Set(ids.filter(Boolean)));
+  const unique = Array.from(new Set(dbIds(ids)));
   if (unique.length === 0) return;
   const { data } = await db.from("profiles").select("*").in("id", unique);
   if (data) cacheProfiles((data as any[]).map(rowToProfile));
