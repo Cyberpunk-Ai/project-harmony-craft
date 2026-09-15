@@ -149,10 +149,13 @@ export async function fetchProfile(id: string): Promise<Profile | null> {
 
   const promise = (async () => {
     try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      // Only UUIDs are valid row ids; anything else is looked up by username.
+      const filter = isUuid ? `id.eq.${id},username.eq.${id}` : `username.eq.${id}`;
       const { data: row } = await supabase
         .from("profiles")
         .select("*")
-        .or(`id.eq.${id},username.eq.${id}`)
+        .or(filter)
         .maybeSingle();
 
       if (row) {

@@ -110,7 +110,9 @@ export async function getPosts(
   if (options.before) query = query.lt("created_at", options.before);
   if (options.tag) query = query.contains("tags", [options.tag]);
   if (options.following) {
-    const { data: follows } = await db.from("follows").select("target_id").eq("follower_id", me());
+    const { data: follows } = isDbId(me())
+      ? await db.from("follows").select("target_id").eq("follower_id", me())
+      : { data: [] as any[] };
     const ids = ((follows ?? []) as any[]).map((f) => f.target_id);
     if (ids.length === 0) return [];
     query = query.in("user_id", [...ids, me()]);
@@ -1253,14 +1255,16 @@ export async function markNotificationsRead() {
 /* --------------------------------------------------------- feed & tuning */
 
 export async function getFeedPreferences(): Promise<{ preferences: UserFeedPreferences }> {
-  const { data } = await db.from("feed_preferences").select("*").eq("user_id", me()).maybeSingle();
+  const { data } = isDbId(me())
+    ? await db.from("feed_preferences").select("*").eq("user_id", me()).maybeSingle()
+    : { data: null as any };
   return { preferences: (data?.prefs ?? {}) as UserFeedPreferences };
 }
 
 export async function updateFeedPreferences(patch: Partial<UserFeedPreferences>) {
   const { preferences } = await getFeedPreferences();
   const merged = { ...preferences, ...patch };
-  await db.from("feed_preferences").upsert({ user_id: me(), prefs: merged });
+  if (isDbId(me())) await db.from("feed_preferences").upsert({ user_id: me(), prefs: merged });
   return { preferences: merged as UserFeedPreferences };
 }
 
@@ -1277,7 +1281,7 @@ export async function sendFeedFeedback(payload: FeedFeedbackPayload) {
   if (action === "mute_author" && payload.authorId) {
     next.mutedAuthors = Array.from(new Set([...(next.mutedAuthors ?? []), payload.authorId]));
   }
-  await db.from("feed_preferences").upsert({ user_id: me(), prefs: next });
+  if (isDbId(me())) await db.from("feed_preferences").upsert({ user_id: me(), prefs: next });
   return { preferences: next };
 }
 
