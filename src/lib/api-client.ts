@@ -147,6 +147,7 @@ export async function getPosts(
 
 /** Posts the signed-in user has bookmarked, fetched by join instead of client filtering. */
 export async function getBookmarkedPosts(limit = 50): Promise<Post[]> {
+  if (!isDbId(me())) return [];
   const { data } = await db
     .from("bookmarks")
     .select("post_id, created_at, posts(*)")
@@ -389,7 +390,9 @@ export async function toggleBookmarkPost(postId: string) {
 
 export async function getMyEngagement(postIds: string[]) {
   const userId = me();
-  if (!userId || postIds.length === 0) return { liked: [], reposted: [], bookmarked: [] };
+  const ids = dbIds(postIds);
+  if (!isDbId(userId) || ids.length === 0) return { liked: [], reposted: [], bookmarked: [] };
+  postIds = ids;
   const [likes, reposts, bookmarks] = await Promise.all([
     db.from("likes").select("post_id").eq("user_id", userId).in("post_id", postIds),
     db.from("reposts").select("post_id").eq("user_id", userId).in("post_id", postIds),
