@@ -53,18 +53,10 @@ async function loadSessionProfile() {
     console.warn("Supabase auth session check notice:", err);
   }
 
-  // Fallback to local session user storage
+  // No verified session: sign the visitor out locally too.
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (parsed && parsed.id && parsed.id !== "guest") {
-        setCurrentUser(parsed);
-        return;
-      }
-    }
+    localStorage.removeItem(STORAGE_KEY);
   } catch {}
-
   setCurrentUser(null);
 }
 
