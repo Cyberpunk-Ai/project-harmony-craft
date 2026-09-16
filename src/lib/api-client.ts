@@ -1577,10 +1577,10 @@ export async function getAdminOverview(): Promise<AdminOverviewData> {
     .eq("live", true);
   const { count: impressions } = await db
     .from("post_impressions")
-    .select("id", { count: "exact", head: true });
-  const { count: likes } = await db.from("likes").select("id", { count: "exact", head: true });
+    .select("post_id", { count: "exact", head: true });
+  const { count: likes } = await db.from("likes").select("post_id", { count: "exact", head: true });
   const { count: comments } = await db.from("comments").select("id", { count: "exact", head: true });
-  const { count: reposts } = await db.from("reposts").select("id", { count: "exact", head: true });
+  const { count: reposts } = await db.from("reposts").select("post_id", { count: "exact", head: true });
   const { count: suspended } = await db
     .from("profiles")
     .select("id", { count: "exact", head: true })
@@ -1639,7 +1639,7 @@ async function buildAdminCharts(totals: {
 }): Promise<AdminCharts> {
   const { data: postRows } = await db
     .from("posts")
-    .select("id,user_id,created_at,impressions,tags")
+    .select("id,user_id,created_at,view_count,tags")
     .order("created_at", { ascending: false })
     .limit(300);
   const posts = (postRows ?? []) as any[];
@@ -1651,7 +1651,7 @@ async function buildAdminCharts(totals: {
     const dayPosts = posts.filter((p) => String(p.created_at ?? "").slice(0, 10) === key);
     days.push({
       date: key.slice(5),
-      impressions: dayPosts.reduce((sum, p) => sum + Number(p.impressions ?? 0), 0),
+      impressions: dayPosts.reduce((sum, p) => sum + Number(p.view_count ?? 0), 0),
       engagement: dayPosts.length,
     });
   }
@@ -1673,7 +1673,7 @@ async function buildAdminCharts(totals: {
   const byUser = new Map<string, number>();
   const postCount = new Map<string, number>();
   for (const p of posts) {
-    byUser.set(p.user_id, (byUser.get(p.user_id) ?? 0) + Number(p.impressions ?? 0));
+    byUser.set(p.user_id, (byUser.get(p.user_id) ?? 0) + Number(p.view_count ?? 0));
     postCount.set(p.user_id, (postCount.get(p.user_id) ?? 0) + 1);
   }
   const topIds = [...byUser.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id]) => id);
@@ -1876,5 +1876,260 @@ export async function getSystemConfig() {
     driver: "supabase" as const,
     features: appConfig.features,
     brand: appConfig.brand,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Creator analytics (real data, computed from the database)
+// ---------------------------------------------------------------------------
+
+export interface CreatorAnalyticsPoint {
+  day: string;
+  impressions: number;
+  reach: number;
+  engagement: number;
+}
+
+export interface CreatorAnalytics {
+  hasData: boolean;
+  totals: {
+    impressions: number;
+    reach: number;
+    engagementRate: number;
+    profileClicks: number;
+    followers: number;
+    posts: number;
+    likes: number;
+    comments: number;
+    reposts: number;
+  };
+  trend: CreatorAnalyticsPoint[];
+  hourly: { hour: string; activity: number }[];
+  regions: { country: string; percentage: number }[];
+  topPosts: {
+    id: string;
+    title: string;
+    views: number;
+    likes: number;
+    reposts: number;
+    ctr: string;
+    tips: string;
+  }[];
+  revenue: {
+    tipCount: number;
+    tipTotal: number;
+    currency: string;
+    supporters: number;
+    recent: { id: string; amount: number; currency: string; message: string; created_at: string }[];
+  };
+}
+
+const EMPTY_ANALYTICS: CreatorAnalytics = {
+  hasData: false,
+  totals: {
+    impressions: 0,
+    reach: 0,
+    engagementRate: 0,
+    profileClicks: 0,
+    followers: 0,
+    posts: 0,
+    likes: 0,
+    comments: 0,
+    reposts: 0,
+  },
+  trend: [],
+  hourly: [],
+  regions: [],
+  topPosts: [],
+  revenue: { tipCount: 0, tipTotal: 0, currency: "USD", supporters: 0, recent: [] },
+};
+
+/**
+ * Real creator analytics for the signed-in profile.
+ * Everything below is derived from posts, impressions, engagement rows,
+ * follows and tips — there is no sample or placeholder data.
+ */
+export async function getCreatorAnalytics(
+  timeframe: "7d" | "30d" = "7d",
+): Promise<CreatorAnalytics> {
+  const userId = me();
+  if (!isDbId(userId)) return EMPTY_ANALYTICS;
+
+  const days = timeframe === "7d" ? 7 : 30;
+  const since = new Date(Date.now() - days * 86400000);
+  const sinceIso = since.toISOString();
+
+  const { data: postRows } = await db
+    .from("posts")
+    .select("id,content,created_at,view_count,like_count,comment_count,repost_count")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  const posts = ((postRows ?? []) as any[]).map((p) => ({
+    id: String(p.id),
+    content: String(p.content ?? ""),
+    created_at: String(p.created_at ?? ""),
+    views: Number(p.view_count ?? 0),
+    likes: Number(p.like_count ?? 0),
+    comments: Number(p.comment_count ?? 0),
+    reposts: Number(p.repost_count ?? 0),
+  }));
+  const postIds = posts.map((p) => p.id);
+
+  const [impressionsRes, followersRes, tipsRes] = await Promise.all([
+    postIds.length
+      ? db
+          .from("post_impressions")
+          .select("post_id,user_id,created_at")
+          .in("post_id", postIds)
+          .gte("created_at", sinceIso)
+          .limit(5000)
+      : Promise.resolve({ data: [] as any[] }),
+    db.from("follows").select("follower_id").eq("target_id", userId).limit(5000),
+    db
+      .from("tips")
+      .select("id,amount,currency,message,created_at,from_user_id")
+      .eq("to_user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(200),
+  ]);
+
+  const impressions = (impressionsRes.data ?? []) as any[];
+  const followerIds = ((followersRes.data ?? []) as any[]).map((r) => String(r.follower_id));
+  const tips = ((tipsRes.data ?? []) as any[]).map((t) => ({
+    id: String(t.id),
+    amount: Number(t.amount ?? 0),
+    currency: String(t.currency ?? "USD"),
+    message: String(t.message ?? ""),
+    created_at: String(t.created_at ?? ""),
+    from: String(t.from_user_id ?? ""),
+  }));
+
+  const totalLikes = posts.reduce((s, p) => s + p.likes, 0);
+  const totalComments = posts.reduce((s, p) => s + p.comments, 0);
+  const totalReposts = posts.reduce((s, p) => s + p.reposts, 0);
+  const totalViews = posts.reduce((s, p) => s + p.views, 0);
+  const totalImpressions = Math.max(totalViews, impressions.length);
+  const reach = new Set(impressions.map((i) => String(i.user_id ?? i.post_id))).size;
+  const interactions = totalLikes + totalComments + totalReposts;
+  const engagementRate = totalImpressions > 0 ? (interactions / totalImpressions) * 100 : 0;
+
+  // Impressions per bucket (day for 7d, week for 30d)
+  const trend: CreatorAnalyticsPoint[] = [];
+  const bucketCount = timeframe === "7d" ? 7 : 4;
+  const bucketMs = timeframe === "7d" ? 86400000 : 7 * 86400000;
+  for (let i = bucketCount - 1; i >= 0; i--) {
+    const end = Date.now() - i * bucketMs;
+    const start = end - bucketMs;
+    const inBucket = impressions.filter((imp) => {
+      const t = new Date(String(imp.created_at ?? 0)).getTime();
+      return t > start && t <= end;
+    });
+    const bucketPosts = posts.filter((p) => {
+      const t = new Date(p.created_at).getTime();
+      return t > start && t <= end;
+    });
+    const bucketInteractions = bucketPosts.reduce(
+      (s, p) => s + p.likes + p.comments + p.reposts,
+      0,
+    );
+    const bucketImpressions = inBucket.length;
+    trend.push({
+      day:
+        timeframe === "7d"
+          ? new Date(end).toLocaleDateString(undefined, { weekday: "short" })
+          : `Week ${bucketCount - i}`,
+      impressions: bucketImpressions,
+      reach: new Set(inBucket.map((imp) => String(imp.user_id ?? imp.post_id))).size,
+      engagement:
+        bucketImpressions > 0
+          ? Number(((bucketInteractions / bucketImpressions) * 100).toFixed(1))
+          : 0,
+    });
+  }
+
+  // Peak activity by hour of day (3-hour buckets to match the chart)
+  const hourBuckets = [0, 3, 6, 9, 12, 15, 18, 21];
+  const hourly = hourBuckets.map((h) => {
+    const count = impressions.filter((imp) => {
+      const hour = new Date(String(imp.created_at ?? 0)).getHours();
+      return hour >= h && hour < h + 3;
+    }).length;
+    const label =
+      h === 0 ? "12am" : h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h - 12}pm`;
+    return { hour: label, activity: count };
+  });
+
+  // Audience locations, from the profiles of people who follow this creator
+  let regions: CreatorAnalytics["regions"] = [];
+  if (followerIds.length) {
+    const { data: followerRows } = await db
+      .from("profiles")
+      .select("location")
+      .in("id", followerIds.slice(0, 1000));
+    const counts = new Map<string, number>();
+    for (const row of (followerRows ?? []) as any[]) {
+      const loc = String(row.location ?? "").trim();
+      const key = loc ? (loc.split(",").pop() ?? loc).trim() : "Unknown";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const total = [...counts.values()].reduce((s, n) => s + n, 0) || 1;
+    regions = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([country, n]) => ({ country, percentage: Math.round((n / total) * 100) }));
+  }
+
+  const tipsByPost = new Map<string, number>();
+  const currency = tips[0]?.currency ?? "USD";
+  const topPosts = [...posts]
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 5)
+    .map((p) => {
+      const interactionsForPost = p.likes + p.comments + p.reposts;
+      return {
+        id: p.id,
+        title: p.content.slice(0, 80) || "(media post)",
+        views: p.views,
+        likes: p.likes,
+        reposts: p.reposts,
+        ctr: p.views > 0 ? `${((interactionsForPost / p.views) * 100).toFixed(1)}%` : "—",
+        tips: `${tipsByPost.get(p.id) ?? 0}`,
+      };
+    });
+
+  const tipTotal = tips.reduce((s, t) => s + t.amount, 0);
+
+  return {
+    hasData: posts.length > 0 || tips.length > 0 || followerIds.length > 0,
+    totals: {
+      impressions: totalImpressions,
+      reach,
+      engagementRate: Number(engagementRate.toFixed(1)),
+      profileClicks: 0,
+      followers: followerIds.length,
+      posts: posts.length,
+      likes: totalLikes,
+      comments: totalComments,
+      reposts: totalReposts,
+    },
+    trend,
+    hourly,
+    regions,
+    topPosts,
+    revenue: {
+      tipCount: tips.length,
+      tipTotal,
+      currency,
+      supporters: new Set(tips.map((t) => t.from)).size,
+      recent: tips.slice(0, 8).map((t) => ({
+        id: t.id,
+        amount: t.amount,
+        currency: t.currency,
+        message: t.message,
+        created_at: t.created_at,
+      })),
+    },
   };
 }

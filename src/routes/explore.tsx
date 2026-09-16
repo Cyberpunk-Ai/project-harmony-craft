@@ -144,9 +144,17 @@ function ExplorePage() {
 
   // Client-side quick filter for creators when query changes
   const filteredCreators = useMemo(() => {
+    // The profile cache is keyed by both id and username, so the same person can
+    // appear twice — dedupe before rendering.
+    const seen = new Set<string>();
+    const people = matchedPeople.filter((p) => {
+      if (!p?.id || seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
     const q = searchQuery.trim().toLowerCase().replace(/^@/, "");
-    if (!q) return matchedPeople;
-    return matchedPeople.filter(
+    if (!q) return people;
+    return people.filter(
       (p) =>
         p.username.toLowerCase().includes(q) ||
         p.display_name.toLowerCase().includes(q) ||

@@ -41,7 +41,7 @@ export const Route = createFileRoute("/pricing")({
   component: PricingPage,
 });
 
-export function PricingPage() {
+function PricingPage() {
   const [annual, setAnnual] = useState(false);
   const { isLoggedIn } = useAuth();
   const { currentPlan } = usePlan();
