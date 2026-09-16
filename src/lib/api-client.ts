@@ -1577,10 +1577,10 @@ export async function getAdminOverview(): Promise<AdminOverviewData> {
     .eq("live", true);
   const { count: impressions } = await db
     .from("post_impressions")
-    .select("id", { count: "exact", head: true });
-  const { count: likes } = await db.from("likes").select("id", { count: "exact", head: true });
+    .select("post_id", { count: "exact", head: true });
+  const { count: likes } = await db.from("likes").select("post_id", { count: "exact", head: true });
   const { count: comments } = await db.from("comments").select("id", { count: "exact", head: true });
-  const { count: reposts } = await db.from("reposts").select("id", { count: "exact", head: true });
+  const { count: reposts } = await db.from("reposts").select("post_id", { count: "exact", head: true });
   const { count: suspended } = await db
     .from("profiles")
     .select("id", { count: "exact", head: true })
@@ -1639,7 +1639,7 @@ async function buildAdminCharts(totals: {
 }): Promise<AdminCharts> {
   const { data: postRows } = await db
     .from("posts")
-    .select("id,user_id,created_at,impressions,tags")
+    .select("id,user_id,created_at,view_count,tags")
     .order("created_at", { ascending: false })
     .limit(300);
   const posts = (postRows ?? []) as any[];
@@ -1651,7 +1651,7 @@ async function buildAdminCharts(totals: {
     const dayPosts = posts.filter((p) => String(p.created_at ?? "").slice(0, 10) === key);
     days.push({
       date: key.slice(5),
-      impressions: dayPosts.reduce((sum, p) => sum + Number(p.impressions ?? 0), 0),
+      impressions: dayPosts.reduce((sum, p) => sum + Number(p.view_count ?? 0), 0),
       engagement: dayPosts.length,
     });
   }
@@ -1673,7 +1673,7 @@ async function buildAdminCharts(totals: {
   const byUser = new Map<string, number>();
   const postCount = new Map<string, number>();
   for (const p of posts) {
-    byUser.set(p.user_id, (byUser.get(p.user_id) ?? 0) + Number(p.impressions ?? 0));
+    byUser.set(p.user_id, (byUser.get(p.user_id) ?? 0) + Number(p.view_count ?? 0));
     postCount.set(p.user_id, (postCount.get(p.user_id) ?? 0) + 1);
   }
   const topIds = [...byUser.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id]) => id);
