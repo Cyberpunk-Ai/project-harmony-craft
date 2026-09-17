@@ -4,6 +4,13 @@
  * schema evolves.
  */
 import { supabase } from "@/integrations/supabase/client";
+import {
+  moderatePost,
+  moderateUser,
+  resolveReport,
+  saveSystemSettings,
+  terminateSpace,
+} from "@/lib/moderation.functions";
 import { cacheProfiles, currentUser, currentUserId, rowToProfile } from "@/lib/profile-service";
 import { emitRealtime } from "@/lib/realtime";
 import { appConfig } from "@/lib/config";
@@ -1003,9 +1010,8 @@ export async function setSpaceParticipantRole(
   return { ok: true };
 }
 
-export async function terminateSpaceAdmin(spaceId: string, actorId: string) {
-  await db.from("spaces").update({ live: false }).eq("id", spaceId);
-  await logAudit(actorId, "space.terminate", "space", spaceId, "Space terminated by admin", "danger");
+export async function terminateSpaceAdmin(spaceId: string, _actorId?: string) {
+  await terminateSpace({ data: { spaceId } });
   emitRealtime("space:terminated", { id: spaceId });
   return { ok: true };
 }

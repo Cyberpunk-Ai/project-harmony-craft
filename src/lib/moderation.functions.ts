@@ -76,7 +76,7 @@ export const moderateUser = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const staff = await assertStaff(context);
 
-    const patch: Record<string, unknown> = {};
+    const patch: Record<string, any> = {};
     if (data.status !== undefined) patch["status"] = data.status;
     if (data.warningCount !== undefined) patch["warning_count"] = data.warningCount;
     if (data.verified !== undefined) {
@@ -172,6 +172,18 @@ export const resolveReport = createServerFn({ method: "POST" })
       "warning",
     );
     return updated;
+  });
+
+/** Ends a live audio room. */
+export const terminateSpace = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ spaceId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const staff = await assertStaff(context);
+    const { error } = await staff.admin.from("spaces").update({ live: false }).eq("id", data.spaceId);
+    if (error) throw new Error(error.message);
+    await writeAudit(staff, "space.terminate", "space", data.spaceId, "Space ended by staff", "danger");
+    return { ok: true };
   });
 
 /** Save the platform-wide settings. Administrators only. */
