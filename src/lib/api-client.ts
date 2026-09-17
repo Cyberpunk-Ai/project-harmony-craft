@@ -1220,6 +1220,7 @@ export async function deleteMessage(messageId: string) {
 
 
 export async function getNotifications(): Promise<Notification[]> {
+  if (!isDbId(me())) return [];
   try {
     const { data } = await db
       .from("notifications")
