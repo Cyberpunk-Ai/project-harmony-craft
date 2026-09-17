@@ -118,7 +118,7 @@ export function useWorkspace() {
     };
   }, []);
 
-  const activeWorkspace = workspaces.find((w) => w.id === activeWsId) ?? workspaces[0]!;
+  const activeWorkspace = workspaces.find((w) => w.id === activeWsId) ?? workspaces[0];
 
   return {
     workspaces,
@@ -129,59 +129,50 @@ export function useWorkspace() {
       listeners.forEach((fn) => fn());
     },
     async inviteMember(email: string, role: WorkspaceRole) {
-      if (signedInProfileId() && !activeWsId.startsWith("ws_")) {
-        await db
-          .from("workspace_members")
-          .insert({ workspace_id: activeWsId, email, role, status: "invited" });
-      }
-      mutateActive((ws) => ({
-        ...ws,
-        members: [
-          ...ws.members,
-          {
-            id: `member_${Date.now()}`,
-            name: email.split("@")[0] || "Teammate",
-            email,
-            avatar_url: null,
-            role,
-            status: "invited",
-          },
-        ],
-      }));
+      if (!activeWsId) throw new Error("Create a workspace first.");
+      const { error } = await db.from("workspace_members").insert({
+        workspace_id: activeWsId,
+        email,
+        name: email.split("@")[0] || "Teammate",
+        role,
+        status: "invited",
+      });
+      if (error) throw new Error(error.message);
+      await hydrate(true);
     },
-    removeMember(id: string) {
-      void db.from("workspace_members").delete().eq("id", id);
+    async removeMember(id: string) {
       mutateActive((ws) => ({ ...ws, members: ws.members.filter((m) => m.id !== id) }));
+      const { error } = await db.from("workspace_members").delete().eq("id", id);
+      if (error) await hydrate(true);
     },
-    updateMemberRole(id: string, role: WorkspaceRole) {
-      void db.from("workspace_members").update({ role }).eq("id", id);
+    async updateMemberRole(id: string, role: WorkspaceRole) {
       mutateActive((ws) => ({
         ...ws,
         members: ws.members.map((m) => (m.id === id ? { ...m, role } : m)),
       }));
+      const { error } = await db.from("workspace_members").update({ role }).eq("id", id);
+      if (error) await hydrate(true);
     },
     async createWorkspace(name: string, logoEmoji = "✨") {
       const userId = signedInProfileId();
-      let id = `ws_${Date.now()}`;
-      if (userId) {
-        const { data } = await db
-          .from("workspaces")
-          .insert({ name, owner_id: userId })
-          .select("id")
-          .maybeSingle();
-        if (data?.id) id = String(data.id);
-      }
-      const ws: Workspace = {
-        id,
-        name,
-        slug: name.toLowerCase().replace(/\s+/g, "-"),
-        logoEmoji,
-        createdAt: new Date().toLocaleDateString(),
-        seatsTotal: 5,
-        members: [],
-      };
-      commit([...workspaces, ws]);
-      activeWsId = ws.id;
+      if (!userId) throw new Error("Sign in to create a workspace.");
+      const { data, error } = await db
+        .from("workspaces")
+        .insert({ name, owner_id: userId, logo_emoji: logoEmoji })
+        .select("id")
+        .maybeSingle();
+      if (error || !data?.id) throw new Error(error?.message ?? "Could not create that workspace.");
+      await db.from("workspace_members").insert({
+        workspace_id: data.id,
+        user_id: userId,
+        email: currentUser.email ?? "",
+        name: currentUser.display_name || currentUser.username || "You",
+        role: "Owner",
+        status: "active",
+      });
+      await hydrate(true);
+      activeWsId = String(data.id);
+      listeners.forEach((fn) => fn());
     },
   };
 }
