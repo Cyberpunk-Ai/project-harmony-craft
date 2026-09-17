@@ -31,29 +31,16 @@ interface DeveloperState {
   totalApiCallsThisMonth: number;
 }
 
-const STORAGE_KEY = "spaces:developer";
 const DEFAULTS: DeveloperState = { apiKeys: [], webhooks: [], totalApiCallsThisMonth: 0 };
 
-function read(): DeveloperState {
-  if (typeof window === "undefined") return DEFAULTS;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? { ...DEFAULTS, ...(JSON.parse(raw) as DeveloperState) } : DEFAULTS;
-  } catch {
-    return DEFAULTS;
-  }
-}
-
-let state = read();
+// Keys and webhooks are only ever read from the database - never cached in the
+// browser, so one account can never see another account's credentials.
+let state: DeveloperState = DEFAULTS;
+let loadedFor: string | null = null;
 const listeners = new Set<() => void>();
 
 function commit(next: DeveloperState) {
   state = next;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    /* storage unavailable */
-  }
   listeners.forEach((fn) => fn());
 }
 
@@ -64,7 +51,14 @@ function randomToken() {
 }
 
 async function hydrate() {
-  if (!signedInProfileId()) return;
+  const userId = signedInProfileId();
+  if (!userId) {
+    loadedFor = null;
+    if (state.apiKeys.length || state.webhooks.length) commit(DEFAULTS);
+    return;
+  }
+  if (loadedFor === userId) return;
+  loadedFor = userId;
   const [apiKeys, webhooks] = await Promise.all([
     loadOwnedRows<ApiKey>("api_keys", (row) => ({
       id: String(row.id),
