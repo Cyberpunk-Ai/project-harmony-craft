@@ -8,15 +8,6 @@ import { cacheProfiles, currentUser, currentUserId, rowToProfile } from "@/lib/p
 import { emitRealtime } from "@/lib/realtime";
 import { appConfig } from "@/lib/config";
 import {
-  SEED_COMMENTS,
-  SEED_CONVERSATIONS,
-  SEED_MESSAGES,
-  SEED_NOTIFICATIONS,
-  SEED_POSTS,
-  SEED_PROFILES,
-  SEED_SPACES,
-  SEED_STORIES,
-} from "@/lib/seed-data";
 import type {
   AdminCharts,
   AdminOverviewData,
@@ -122,10 +113,6 @@ export async function getPosts(
     console.warn("getPosts notice:", error.message);
   }
   let posts = (data ?? []).map((row: any) => rowToPost(row));
-
-  if (posts.length === 0 && !options.before && !options.userId && !options.tag && !options.following) {
-    posts = [...SEED_POSTS];
-  }
 
   // "For you" blends freshness with engagement so the tab differs from "Latest".
   if (options.filter === "foryou" && !options.userId && !options.tag) {
@@ -466,7 +453,7 @@ export async function getPostComments(postId: string): Promise<PostComment[]> {
   } catch (err) {
     console.warn("getPostComments notice:", err);
   }
-  return SEED_COMMENTS[postId] ?? [];
+  return [];
 }
 
 /**
@@ -578,7 +565,7 @@ export async function getStories(): Promise<Story[]> {
   } catch (err) {
     console.warn("getStories notice:", err);
   }
-  return [...SEED_STORIES];
+  return [];
 }
 
 export async function createStory(input: {
@@ -703,9 +690,6 @@ export async function getUsers(): Promise<{ profiles: Profile[] }> {
     }
   } catch (err) {
     console.warn("getUsers notice:", err);
-  }
-  if (profiles.length === 0) {
-    profiles = [...SEED_PROFILES];
   }
   const seen = new Set<string>();
   const uniqueProfiles = profiles.filter((p) => {
@@ -854,7 +838,7 @@ export async function getSpaces(): Promise<{ spaces: Space[] }> {
   } catch (err) {
     console.warn("getSpaces notice:", err);
   }
-  return { spaces: [...SEED_SPACES] };
+  return { spaces: [] };
 }
 
 /** Start a new live audio room, or schedule one for later, hosted by the signed-in profile. */
@@ -1064,7 +1048,7 @@ export async function getConversations(): Promise<Conversation[]> {
   } catch (err) {
     console.warn("getConversations notice:", err);
   }
-  return [...SEED_CONVERSATIONS];
+  return [];
 }
 
 export async function getMessages(conversationId: string): Promise<Message[]> {
@@ -1090,7 +1074,7 @@ export async function getMessages(conversationId: string): Promise<Message[]> {
   } catch (err) {
     console.warn("getMessages notice:", err);
   }
-  return SEED_MESSAGES[conversationId] ?? [];
+  return [];
 }
 
 
@@ -1231,7 +1215,6 @@ export async function deleteMessage(messageId: string) {
 
 
 export async function getNotifications(): Promise<Notification[]> {
-  if (!isDbId(me())) return [...SEED_NOTIFICATIONS];
   try {
     const { data } = await db
       .from("notifications")
@@ -1243,7 +1226,7 @@ export async function getNotifications(): Promise<Notification[]> {
   } catch (err) {
     console.warn("getNotifications notice:", err);
   }
-  return [...SEED_NOTIFICATIONS];
+  return [];
 }
 
 export async function markNotificationsRead() {
@@ -1338,10 +1321,6 @@ export async function sendTipApi(input: {
       .eq("username", username)
       .maybeSingle();
     recipientId = data?.id;
-    if (!recipientId) {
-      const p = SEED_PROFILES.find((prof) => prof.username === username || prof.id === username);
-      if (p?.id) recipientId = p.id;
-    }
   }
   if (!recipientId) recipientId = `user_${username || "creator"}`;
   const senderId = me() || (currentUser.id !== "guest" ? currentUser.id : "user_me");
