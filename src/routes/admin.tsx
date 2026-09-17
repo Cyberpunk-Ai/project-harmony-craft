@@ -37,7 +37,7 @@ const TABS = ["overview", "users", "content", "moderation", "audit", "settings"]
 function AdminPage() {
   const { user } = useAuth();
   const profile = user || currentUser;
-  const [activeRole, setActiveRole] = useState<UserRole>((profile.role as UserRole) || "superadmin");
+  const [activeRole, setActiveRole] = useState<UserRole>("moderator");
   const [tab, setTab] = useState<(typeof TABS)[number]>("overview");
   const [overview, setOverview] = useState<AdminOverviewData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -46,41 +46,12 @@ function AdminPage() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      // Direct credential & role evaluation
-      const email = (profile.email || "").toLowerCase();
-      const username = (profile.username || "").toLowerCase();
-      const role = profile.role;
-
-      if (
-        role === "admin" ||
-        role === "superadmin" ||
-        role === "moderator" ||
-        email.includes("spacesnext579") ||
-        email.includes("admin") ||
-        username === "spacesnext" ||
-        username === "alexrivers" ||
-        profile.id === "user_spacesnext"
-      ) {
-        if (!cancelled) setAccess("granted");
-        return;
-      }
-
+      // Access is decided by the account's real role on the server. There are
+      // no name, email or "allow anyway" shortcuts.
       const { data: sessionData } = await supabase.auth.getUser();
-      const authUser = sessionData?.user;
-      const authEmail = (authUser?.email || "").toLowerCase();
-
-      if (
-        authEmail.includes("spacesnext579") ||
-        authEmail.includes("admin")
-      ) {
-        if (!cancelled) setAccess("granted");
-        return;
-      }
-
-      const authUserId = authUser?.id;
+      const authUserId = sessionData?.user?.id;
       if (!authUserId) {
-        // Allow access in sandbox/demo session
-        if (!cancelled) setAccess("granted");
+        if (!cancelled) setAccess("denied");
         return;
       }
 
@@ -89,9 +60,18 @@ function AdminPage() {
           supabase.rpc("has_role", { _user_id: authUserId, _role: "admin" }),
           supabase.rpc("has_role", { _user_id: authUserId, _role: "moderator" }),
         ]);
-        if (!cancelled) setAccess(isAdmin || isMod ? "granted" : "granted");
+        if (cancelled) return;
+        if (isAdmin) {
+          setActiveRole("admin");
+          setAccess("granted");
+        } else if (isMod) {
+          setActiveRole("moderator");
+          setAccess("granted");
+        } else {
+          setAccess("denied");
+        }
       } catch {
-        if (!cancelled) setAccess("granted");
+        if (!cancelled) setAccess("denied");
       }
     })();
     return () => {
