@@ -76,12 +76,16 @@ export const moderateUser = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const staff = await assertStaff(context);
 
-    const patch: Record<string, any> = {};
-    if (data.status !== undefined) patch["status"] = data.status;
-    if (data.warningCount !== undefined) patch["warning_count"] = data.warningCount;
+    const patch: {
+      status?: string;
+      warning_count?: number;
+      verified?: boolean;
+    } = {};
+    if (data.status !== undefined) patch.status = data.status;
+    if (data.warningCount !== undefined) patch.warning_count = data.warningCount;
     if (data.verified !== undefined) {
       if (!staff.isAdmin) throw new Error("Only administrators can change verification.");
-      patch["verified"] = data.verified;
+      patch.verified = data.verified;
     }
     if (Object.keys(patch).length === 0) throw new Error("Nothing to change.");
 
