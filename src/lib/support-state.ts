@@ -13,32 +13,27 @@ export interface SupportTicket {
   createdAt: string;
 }
 
-const STORAGE_KEY = "spaces:support";
-
-function read(): SupportTicket[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as SupportTicket[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-let tickets = read();
+let tickets: SupportTicket[] = [];
+let loadedFor: string | null = null;
 const listeners = new Set<() => void>();
 
 function persist() {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(tickets));
-  } catch {
-    /* storage unavailable */
-  }
   listeners.forEach((fn) => fn());
 }
 
+/** Tickets live in the database; this only mirrors them for the current account. */
 async function hydrate() {
-  if (!signedInProfileId()) return;
+  const userId = signedInProfileId();
+  if (!userId) {
+    if (tickets.length) {
+      tickets = [];
+      loadedFor = null;
+      persist();
+    }
+    return;
+  }
+  if (loadedFor === userId) return;
+  loadedFor = userId;
   tickets = await loadOwnedRows<SupportTicket>("support_tickets", (row) => ({
     id: String(row.id),
     subject: String(row.subject),

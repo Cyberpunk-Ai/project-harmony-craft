@@ -5,7 +5,6 @@ import { currentUser, setCurrentUser, subscribeProfiles } from "@/lib/profile-se
 import { supabase } from "@/integrations/supabase/client";
 import { attachRemoteRecord, signedInProfileId } from "@/lib/remote-store";
 
-const STORAGE_KEY = "spaces:plan-state";
 
 interface PlanUsage {
   aiDraftsToday: number;
@@ -27,16 +26,8 @@ function read(): StoredPlanState {
     cycle: "monthly",
     usage: { aiDraftsToday: 0, day: today() },
   };
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return fallback;
-    const parsed = { ...fallback, ...(JSON.parse(raw) as StoredPlanState) };
-    if (parsed.usage?.day !== today()) parsed.usage = { aiDraftsToday: 0, day: today() };
-    return parsed;
-  } catch {
-    return fallback;
-  }
+  // The real counter lives in the database per account; nothing is cached here.
+  return fallback;
 }
 
 let state = read();
@@ -65,13 +56,6 @@ const remote = attachRemoteRecord<StoredPlanState>({
 
 function commit(next: Partial<StoredPlanState>) {
   state = { ...state, ...next };
-  if (typeof window !== "undefined") {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      /* storage unavailable */
-    }
-  }
   listeners.forEach((fn) => fn());
   remote.push(state);
 }

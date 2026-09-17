@@ -30,24 +30,50 @@ export function TeamWorkspaceManager() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<WorkspaceRole>("Editor");
+  const [inviting, setInviting] = useState(false);
 
-  const handleSendInvite = (e: React.FormEvent) => {
+  const handleSendInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail || !inviteEmail.includes("@")) {
       toast.error("Please enter a valid email address");
       return;
     }
+    if (!activeWorkspace) return;
 
     if (activeWorkspace.members.length >= activeWorkspace.seatsTotal) {
       toast.error(`Workspace seat limit reached (${activeWorkspace.seatsTotal} seats max)`);
       return;
     }
 
-    inviteMember(inviteEmail, inviteRole);
-    toast.success(`Invitation sent to ${inviteEmail} as ${inviteRole}!`);
-    setInviteEmail("");
-    setIsInviteModalOpen(false);
+    if (activeWorkspace.members.some((m) => m.email.toLowerCase() === inviteEmail.toLowerCase())) {
+      toast.error("That person is already on this workspace.");
+      return;
+    }
+
+    setInviting(true);
+    try {
+      await inviteMember(inviteEmail, inviteRole);
+      toast.success(`Invitation sent to ${inviteEmail} as ${inviteRole}!`);
+      setInviteEmail("");
+      setIsInviteModalOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send that invitation.");
+    } finally {
+      setInviting(false);
+    }
   };
+
+  if (!activeWorkspace) {
+    return (
+      <div className="rounded-2xl border border-border bg-card p-10 text-center">
+        <Building className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+        <h3 className="text-base font-extrabold">Setting up your workspace</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          One moment — we&apos;re preparing your team space.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -304,9 +330,10 @@ export function TeamWorkspaceManager() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 py-2.5 text-xs font-bold text-white shadow-soft hover:brightness-105 transition-all cursor-pointer"
+                  disabled={inviting}
+                  className="flex-1 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 py-2.5 text-xs font-bold text-white shadow-soft hover:brightness-105 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Send Invitation
+                  {inviting ? "Sending…" : "Send Invitation"}
                 </button>
               </div>
             </form>

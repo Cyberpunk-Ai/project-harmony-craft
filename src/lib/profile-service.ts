@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
-import { SEED_PROFILES } from "@/lib/seed-data";
 import type { Profile } from "@/lib/types";
 
 export const GUEST_PROFILE: Profile = {
@@ -29,12 +28,6 @@ export let currentUser: Profile = GUEST_PROFILE;
 export let currentUserId: string = GUEST_PROFILE.id;
 
 const profileCache = new Map<string, Profile>();
-
-// Preload seed profiles into cache
-for (const p of SEED_PROFILES) {
-  profileCache.set(p.id, p);
-  profileCache.set(p.username, p);
-}
 
 const inflight = new Map<string, Promise<Profile | null>>();
 const listeners = new Set<() => void>();
@@ -106,8 +99,6 @@ export function getProfile(idOrUsername?: string | null): Profile {
   if (!idOrUsername || idOrUsername === "guest") return GUEST_PROFILE;
   const found = profileCache.get(idOrUsername);
   if (found) return found;
-  const seed = SEED_PROFILES.find((p) => p.id === idOrUsername || p.username === idOrUsername);
-  if (seed) return seed;
   return {
     ...GUEST_PROFILE,
     id: idOrUsername,
@@ -167,13 +158,6 @@ export async function fetchProfile(id: string): Promise<Profile | null> {
       }
     } catch (err) {
       console.warn("fetchProfile notice:", err);
-    }
-
-    // Check seed profiles fallback
-    const seed = SEED_PROFILES.find((p) => p.id === id || p.username === id);
-    if (seed) {
-      profileCache.set(seed.id, seed);
-      return seed;
     }
 
     return null;

@@ -4,19 +4,16 @@
  * schema evolves.
  */
 import { supabase } from "@/integrations/supabase/client";
+import {
+  moderatePost,
+  moderateUser,
+  resolveReport,
+  saveSystemSettings,
+  terminateSpace,
+} from "@/lib/moderation.functions";
 import { cacheProfiles, currentUser, currentUserId, rowToProfile } from "@/lib/profile-service";
 import { emitRealtime } from "@/lib/realtime";
 import { appConfig } from "@/lib/config";
-import {
-  SEED_COMMENTS,
-  SEED_CONVERSATIONS,
-  SEED_MESSAGES,
-  SEED_NOTIFICATIONS,
-  SEED_POSTS,
-  SEED_PROFILES,
-  SEED_SPACES,
-  SEED_STORIES,
-} from "@/lib/seed-data";
 import type {
   AdminCharts,
   AdminOverviewData,
@@ -122,10 +119,6 @@ export async function getPosts(
     console.warn("getPosts notice:", error.message);
   }
   let posts = (data ?? []).map((row: any) => rowToPost(row));
-
-  if (posts.length === 0 && !options.before && !options.userId && !options.tag && !options.following) {
-    posts = [...SEED_POSTS];
-  }
 
   // "For you" blends freshness with engagement so the tab differs from "Latest".
   if (options.filter === "foryou" && !options.userId && !options.tag) {
@@ -466,7 +459,7 @@ export async function getPostComments(postId: string): Promise<PostComment[]> {
   } catch (err) {
     console.warn("getPostComments notice:", err);
   }
-  return SEED_COMMENTS[postId] ?? [];
+  return [];
 }
 
 /**
@@ -578,7 +571,7 @@ export async function getStories(): Promise<Story[]> {
   } catch (err) {
     console.warn("getStories notice:", err);
   }
-  return [...SEED_STORIES];
+  return [];
 }
 
 export async function createStory(input: {
@@ -703,9 +696,6 @@ export async function getUsers(): Promise<{ profiles: Profile[] }> {
     }
   } catch (err) {
     console.warn("getUsers notice:", err);
-  }
-  if (profiles.length === 0) {
-    profiles = [...SEED_PROFILES];
   }
   const seen = new Set<string>();
   const uniqueProfiles = profiles.filter((p) => {
@@ -854,7 +844,7 @@ export async function getSpaces(): Promise<{ spaces: Space[] }> {
   } catch (err) {
     console.warn("getSpaces notice:", err);
   }
-  return { spaces: [...SEED_SPACES] };
+  return { spaces: [] };
 }
 
 /** Start a new live audio room, or schedule one for later, hosted by the signed-in profile. */
@@ -1020,9 +1010,8 @@ export async function setSpaceParticipantRole(
   return { ok: true };
 }
 
-export async function terminateSpaceAdmin(spaceId: string, actorId: string) {
-  await db.from("spaces").update({ live: false }).eq("id", spaceId);
-  await logAudit(actorId, "space.terminate", "space", spaceId, "Space terminated by admin", "danger");
+export async function terminateSpaceAdmin(spaceId: string, _actorId?: string) {
+  await terminateSpace({ data: { spaceId } });
   emitRealtime("space:terminated", { id: spaceId });
   return { ok: true };
 }
@@ -1064,7 +1053,7 @@ export async function getConversations(): Promise<Conversation[]> {
   } catch (err) {
     console.warn("getConversations notice:", err);
   }
-  return [...SEED_CONVERSATIONS];
+  return [];
 }
 
 export async function getMessages(conversationId: string): Promise<Message[]> {
@@ -1090,7 +1079,7 @@ export async function getMessages(conversationId: string): Promise<Message[]> {
   } catch (err) {
     console.warn("getMessages notice:", err);
   }
-  return SEED_MESSAGES[conversationId] ?? [];
+  return [];
 }
 
 
@@ -1231,7 +1220,7 @@ export async function deleteMessage(messageId: string) {
 
 
 export async function getNotifications(): Promise<Notification[]> {
-  if (!isDbId(me())) return [...SEED_NOTIFICATIONS];
+  if (!isDbId(me())) return [];
   try {
     const { data } = await db
       .from("notifications")
@@ -1243,7 +1232,7 @@ export async function getNotifications(): Promise<Notification[]> {
   } catch (err) {
     console.warn("getNotifications notice:", err);
   }
-  return [...SEED_NOTIFICATIONS];
+  return [];
 }
 
 export async function markNotificationsRead() {
@@ -1338,10 +1327,6 @@ export async function sendTipApi(input: {
       .eq("username", username)
       .maybeSingle();
     recipientId = data?.id;
-    if (!recipientId) {
-      const p = SEED_PROFILES.find((prof) => prof.username === username || prof.id === username);
-      if (p?.id) recipientId = p.id;
-    }
   }
   if (!recipientId) recipientId = `user_${username || "creator"}`;
   const senderId = me() || (currentUser.id !== "guest" ? currentUser.id : "user_me");
@@ -1418,15 +1403,15 @@ export async function updateReportStatus(
   reportId: string,
   status: string,
   actionTaken?: string,
-  actorId?: string,
+  _actorId?: string,
 ) {
-  const { data } = await db
-    .from("reports")
-    .update({ status, action_taken: actionTaken ?? null })
-    .eq("id", reportId)
-    .select("*")
-    .maybeSingle();
-  await logAudit(actorId ?? me(), `report.${status}`, "report", reportId, actionTaken ?? "", "warning");
+  const data = await resolveReport({
+    data: {
+      reportId,
+      status: status as "pending" | "reviewing" | "resolved" | "dismissed",
+      ...(actionTaken ? { actionTaken } : {}),
+    },
+  });
   emitRealtime("report:updated", data);
   return data as ModerationReport;
 }
@@ -1450,9 +1435,17 @@ export async function getAdminUsers(
   return profiles;
 }
 
-export async function updateUserAdmin(userId: string, patch: Record<string, any>, actorId?: string) {
-  const { data } = await db.from("profiles").update(patch).eq("id", userId).select("*").maybeSingle();
-  await logAudit(actorId ?? me(), "user.update", "user", userId, JSON.stringify(patch), "warning");
+export async function updateUserAdmin(userId: string, patch: Record<string, any>, _actorId?: string) {
+  const data = await moderateUser({
+    data: {
+      profileId: userId,
+      ...(patch["status"] !== undefined ? { status: patch["status"] } : {}),
+      ...(patch["verified"] !== undefined ? { verified: !!patch["verified"] } : {}),
+      ...(patch["warning_count"] !== undefined
+        ? { warningCount: Number(patch["warning_count"]) }
+        : {}),
+    },
+  });
   const profile = data ? rowToProfile(data) : null;
   if (profile) {
     cacheProfiles([profile]);
@@ -1472,11 +1465,17 @@ export async function getAdminPosts(filters: { query?: string } = {}) {
   return posts;
 }
 
-export async function forceDeletePostAdmin(postId: string, actorId?: string) {
-  await db.from("posts").delete().eq("id", postId);
-  await logAudit(actorId ?? me(), "post.force_delete", "post", postId, "Post removed by moderator", "danger");
+export async function forceDeletePostAdmin(postId: string, _actorId?: string) {
+  await moderatePost({ data: { postId, action: "delete" } });
   emitRealtime("post:deleted", { id: postId });
   return { ok: true };
+}
+
+/** Hides a post from every feed without deleting it. */
+export async function hidePostAdmin(postId: string, hidden = true) {
+  await moderatePost({ data: { postId, action: hidden ? "hide" : "unhide" } });
+  emitRealtime("post:updated", { id: postId, hidden });
+  return { ok: true, hidden };
 }
 
 export async function getAdminAuditLogs(filters: { limit?: number; severity?: string } = {}) {
@@ -1488,35 +1487,6 @@ export async function getAdminAuditLogs(filters: { limit?: number; severity?: st
   if (filters.severity) q = q.eq("severity", filters.severity);
   const { data } = await q;
   return (data ?? []) as AuditLog[];
-}
-
-async function logAudit(
-  actorId: string,
-  action: string,
-  targetType: string,
-  targetId: string,
-  details: string,
-  severity: AuditLog["severity"] = "info",
-) {
-  try {
-    const { data } = await db
-      .from("audit_logs")
-      .insert({
-        actor_id: actorId,
-        actor_name: currentUser.display_name,
-        actor_role: currentUser.role ?? "admin",
-        action,
-        target_type: targetType,
-        target_id: targetId,
-        details,
-        severity,
-      })
-      .select("*")
-      .maybeSingle();
-    if (data) emitRealtime("audit:created", data);
-  } catch {
-    /* audit logging is best-effort */
-  }
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
@@ -1547,14 +1517,10 @@ export async function getPublicSettings(): Promise<SystemSettings> {
   return getAdminSettings();
 }
 
-export async function updateAdminSettings(settings: SystemSettings, actorId?: string) {
-  const { data: existing } = await db.from("system_settings").select("id").limit(1).maybeSingle();
-  const payload = { ...settings, updated_at: nowIso() };
-  if (existing) await db.from("system_settings").update(payload).eq("id", existing.id);
-  else await db.from("system_settings").insert({ id: 1, ...payload });
-  await logAudit(actorId ?? me(), "settings.update", "system", "settings", "System settings updated", "warning");
-  emitRealtime("settings:updated", settings);
-  return settings;
+export async function updateAdminSettings(settings: SystemSettings, _actorId?: string) {
+  const saved = await saveSystemSettings({ data: settings as any });
+  emitRealtime("settings:updated", saved);
+  return { ...settings, ...(saved as Partial<SystemSettings>) };
 }
 
 export async function syncSupabaseDatabase() {

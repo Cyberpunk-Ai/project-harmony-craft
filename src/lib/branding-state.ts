@@ -70,20 +70,10 @@ export interface BrandingState {
   showAuraOnPosts: boolean;
 }
 
-const STORAGE_KEY = "spaces:branding";
 const DEFAULTS: BrandingState = { themeId: "aurora", tagline: "", showAuraOnPosts: true };
 
-function read(): BrandingState {
-  if (typeof window === "undefined") return DEFAULTS;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? { ...DEFAULTS, ...(JSON.parse(raw) as BrandingState) } : DEFAULTS;
-  } catch {
-    return DEFAULTS;
-  }
-}
-
-let state = read();
+// Branding is stored per account in the database; the browser only mirrors it.
+let state: BrandingState = DEFAULTS;
 const listeners = new Set<() => void>();
 
 const remote = attachRemoteRecord<BrandingState>({
@@ -114,11 +104,6 @@ export function useBranding() {
 
   function updateBranding(patch: Partial<BrandingState>) {
     state = { ...state, ...patch };
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      /* storage unavailable */
-    }
     listeners.forEach((fn) => fn());
     remote.push(state);
   }
