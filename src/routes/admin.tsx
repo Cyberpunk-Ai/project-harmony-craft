@@ -115,7 +115,11 @@ function AdminPage() {
       <AdminHeader
         currentProfile={profile}
         activeRole={activeRole}
-        onRoleChange={setActiveRole}
+        onRoleChange={(next) => {
+          // Staff can only preview access levels at or below their own; the
+          // server re-checks the real role on every action regardless.
+          if (activeRole === "admin") setActiveRole(next);
+        }}
         systemHealth={overview?.stats.system_health}
         onRefresh={load}
         isRefreshing={refreshing}
