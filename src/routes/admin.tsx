@@ -102,8 +102,8 @@ function AdminPage() {
         </h1>
         {access === "denied" ? (
           <p className="text-sm text-muted-foreground">
-            This console is limited to Spaces administrators and moderators. Sign in with an
-            admin account to continue.
+            This console is limited to Starpace administrators and moderators. Sign in with an
+            account that has been given access to continue.
           </p>
         ) : null}
       </div>
