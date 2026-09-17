@@ -14,6 +14,7 @@ export interface ApiKey {
   fullKey?: string;
   createdAt: string;
   lastUsed: string;
+  calls?: number;
 }
 
 export interface Webhook {
@@ -59,6 +60,7 @@ async function hydrate() {
   }
   if (loadedFor === userId) return;
   loadedFor = userId;
+  let calls = 0;
   const [apiKeys, webhooks] = await Promise.all([
     loadOwnedRows<ApiKey>("api_keys", (row) => ({
       id: String(row.id),
@@ -66,6 +68,7 @@ async function hydrate() {
       maskedKey: `${row.prefix}••••••••${String(row.key_hash).slice(-6)}`,
       createdAt: new Date(row.created_at).toLocaleDateString(),
       lastUsed: row.last_used_at ? new Date(row.last_used_at).toLocaleDateString() : "Never",
+      calls: Number(row.call_count ?? 0),
     })),
     loadOwnedRows<Webhook>("webhooks", (row) => ({
       id: String(row.id),
@@ -76,7 +79,8 @@ async function hydrate() {
       createdAt: new Date(row.created_at).toLocaleDateString(),
     })),
   ]);
-  commit({ ...state, apiKeys, webhooks });
+  calls = apiKeys.reduce((sum, k) => sum + (k.calls ?? 0), 0);
+  commit({ apiKeys, webhooks, totalApiCallsThisMonth: calls });
 }
 
 export function useDeveloper() {
