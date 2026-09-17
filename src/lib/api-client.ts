@@ -1396,15 +1396,15 @@ export async function updateReportStatus(
   reportId: string,
   status: string,
   actionTaken?: string,
-  actorId?: string,
+  _actorId?: string,
 ) {
-  const { data } = await db
-    .from("reports")
-    .update({ status, action_taken: actionTaken ?? null })
-    .eq("id", reportId)
-    .select("*")
-    .maybeSingle();
-  await logAudit(actorId ?? me(), `report.${status}`, "report", reportId, actionTaken ?? "", "warning");
+  const data = await resolveReport({
+    data: {
+      reportId,
+      status: status as "pending" | "reviewing" | "resolved" | "dismissed",
+      ...(actionTaken ? { actionTaken } : {}),
+    },
+  });
   emitRealtime("report:updated", data);
   return data as ModerationReport;
 }
@@ -1428,9 +1428,17 @@ export async function getAdminUsers(
   return profiles;
 }
 
-export async function updateUserAdmin(userId: string, patch: Record<string, any>, actorId?: string) {
-  const { data } = await db.from("profiles").update(patch).eq("id", userId).select("*").maybeSingle();
-  await logAudit(actorId ?? me(), "user.update", "user", userId, JSON.stringify(patch), "warning");
+export async function updateUserAdmin(userId: string, patch: Record<string, any>, _actorId?: string) {
+  const data = await moderateUser({
+    data: {
+      profileId: userId,
+      ...(patch["status"] !== undefined ? { status: patch["status"] } : {}),
+      ...(patch["verified"] !== undefined ? { verified: !!patch["verified"] } : {}),
+      ...(patch["warning_count"] !== undefined
+        ? { warningCount: Number(patch["warning_count"]) }
+        : {}),
+    },
+  });
   const profile = data ? rowToProfile(data) : null;
   if (profile) {
     cacheProfiles([profile]);
@@ -1450,11 +1458,17 @@ export async function getAdminPosts(filters: { query?: string } = {}) {
   return posts;
 }
 
-export async function forceDeletePostAdmin(postId: string, actorId?: string) {
-  await db.from("posts").delete().eq("id", postId);
-  await logAudit(actorId ?? me(), "post.force_delete", "post", postId, "Post removed by moderator", "danger");
+export async function forceDeletePostAdmin(postId: string, _actorId?: string) {
+  await moderatePost({ data: { postId, action: "delete" } });
   emitRealtime("post:deleted", { id: postId });
   return { ok: true };
+}
+
+/** Hides a post from every feed without deleting it. */
+export async function hidePostAdmin(postId: string, hidden = true) {
+  await moderatePost({ data: { postId, action: hidden ? "hide" : "unhide" } });
+  emitRealtime("post:updated", { id: postId, hidden });
+  return { ok: true, hidden };
 }
 
 export async function getAdminAuditLogs(filters: { limit?: number; severity?: string } = {}) {
@@ -1466,35 +1480,6 @@ export async function getAdminAuditLogs(filters: { limit?: number; severity?: st
   if (filters.severity) q = q.eq("severity", filters.severity);
   const { data } = await q;
   return (data ?? []) as AuditLog[];
-}
-
-async function logAudit(
-  actorId: string,
-  action: string,
-  targetType: string,
-  targetId: string,
-  details: string,
-  severity: AuditLog["severity"] = "info",
-) {
-  try {
-    const { data } = await db
-      .from("audit_logs")
-      .insert({
-        actor_id: actorId,
-        actor_name: currentUser.display_name,
-        actor_role: currentUser.role ?? "admin",
-        action,
-        target_type: targetType,
-        target_id: targetId,
-        details,
-        severity,
-      })
-      .select("*")
-      .maybeSingle();
-    if (data) emitRealtime("audit:created", data);
-  } catch {
-    /* audit logging is best-effort */
-  }
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
@@ -1525,14 +1510,10 @@ export async function getPublicSettings(): Promise<SystemSettings> {
   return getAdminSettings();
 }
 
-export async function updateAdminSettings(settings: SystemSettings, actorId?: string) {
-  const { data: existing } = await db.from("system_settings").select("id").limit(1).maybeSingle();
-  const payload = { ...settings, updated_at: nowIso() };
-  if (existing) await db.from("system_settings").update(payload).eq("id", existing.id);
-  else await db.from("system_settings").insert({ id: 1, ...payload });
-  await logAudit(actorId ?? me(), "settings.update", "system", "settings", "System settings updated", "warning");
-  emitRealtime("settings:updated", settings);
-  return settings;
+export async function updateAdminSettings(settings: SystemSettings, _actorId?: string) {
+  const saved = await saveSystemSettings({ data: settings as any });
+  emitRealtime("settings:updated", saved);
+  return { ...settings, ...(saved as Partial<SystemSettings>) };
 }
 
 export async function syncSupabaseDatabase() {
