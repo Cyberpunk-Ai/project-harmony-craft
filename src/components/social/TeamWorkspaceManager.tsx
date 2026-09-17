@@ -330,9 +330,10 @@ export function TeamWorkspaceManager() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 py-2.5 text-xs font-bold text-white shadow-soft hover:brightness-105 transition-all cursor-pointer"
+                  disabled={inviting}
+                  className="flex-1 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 py-2.5 text-xs font-bold text-white shadow-soft hover:brightness-105 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Send Invitation
+                  {inviting ? "Sending…" : "Send Invitation"}
                 </button>
               </div>
             </form>
