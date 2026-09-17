@@ -7,7 +7,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { cacheProfiles, currentUser, currentUserId, rowToProfile } from "@/lib/profile-service";
 import { emitRealtime } from "@/lib/realtime";
 import { appConfig } from "@/lib/config";
-import {
 import type {
   AdminCharts,
   AdminOverviewData,
