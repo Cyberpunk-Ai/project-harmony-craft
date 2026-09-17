@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { PLAN_DETAILS, type PlanTier } from "@/lib/plans";
 
-const MODEL = "google/gemini-3.7-flash";
+const MODEL = "google/gemini-2.5-flash";
 const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 function today() {
