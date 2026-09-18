@@ -232,28 +232,25 @@ export const savePayoutDestination = createServerFn({ method: "POST" })
     const profileId = await myProfileId(supabase, userId);
     const currency = payoutCurrency();
 
-    let recipientCode = `RCP_${crypto.randomUUID().replace(/-/g, "").slice(0, 14)}`;
+    let recipientCode = "";
     let accountName = data.accountName.trim();
 
-    try {
-      const recipient = await paystack("/transferrecipient", {
-        method: "POST",
-        body: JSON.stringify({
-          type: data.method === "mobile_money" ? "mobile_money" : "nuban",
-          name: accountName,
-          account_number: data.accountNumber.trim(),
-          bank_code: data.bankCode,
-          currency,
-        }),
-      });
-      if (recipient.data?.recipient_code) {
-        recipientCode = recipient.data.recipient_code;
-      }
-      if (recipient.data?.details?.account_name) {
-        accountName = recipient.data.details.account_name;
-      }
-    } catch (err) {
-      console.warn("Paystack recipient register notice (using sandbox verification):", err);
+    const recipient = await paystack("/transferrecipient", {
+      method: "POST",
+      body: JSON.stringify({
+        type: data.method === "mobile_money" ? "mobile_money" : "nuban",
+        name: accountName,
+        account_number: data.accountNumber.trim(),
+        bank_code: data.bankCode,
+        currency,
+      }),
+    });
+    recipientCode = String(recipient.data?.recipient_code ?? "");
+    if (!recipientCode) {
+      throw new Error("We couldn't verify that account. Check the details and try again.");
+    }
+    if (recipient.data?.details?.account_name) {
+      accountName = recipient.data.details.account_name;
     }
 
     const details = {
