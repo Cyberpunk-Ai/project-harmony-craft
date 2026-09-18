@@ -188,16 +188,9 @@ export function useMonetization() {
     };
   }, []);
 
-  const sendTip = useCallback(async (input: SendTipInput) => {
-    await sendTipApi({
-      recipientUsername: input.recipientUsername,
-      amount: input.amount,
-      message: input.message,
-      postId: input.postId,
-      spaceId: input.spaceId,
-    });
-    await refreshMonetization();
-  }, []);
+  // Tips are created by the payment provider flow (checkout → confirmation),
+  // never written directly from the browser.
+
 
   const requestPayout = useCallback(async (amount?: number) => {
     const result = await requestPayoutApi({ data: { amount } });
