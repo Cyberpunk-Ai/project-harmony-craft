@@ -72,21 +72,14 @@ export function UpgradeModal() {
         data: { plan: selectedPlan, cycle, origin: window.location.origin },
       })) as { authorizationUrl?: string; reference?: string };
 
-      if (!res?.authorizationUrl && !res?.reference) {
-        throw new Error("Checkout session could not be started.");
+      if (!res?.authorizationUrl || !res.reference) {
+        throw new Error("We couldn't open a secure checkout. Please try again.");
       }
 
+      // The plan is activated only after the provider confirms the payment.
       openPaystackPayment({
         authorizationUrl: res.authorizationUrl,
-        reference: res.reference || `sub_${Date.now()}`,
-        email: user?.email || undefined,
-        amountInCents: Math.round(Number(finalTotal) * 130 * 100),
-        currency: "KES",
-        onSuccess: () => {
-          setIsProcessing(false);
-          setIsSuccess(true);
-          upgradePlan(selectedPlan, cycle);
-        },
+        reference: res.reference,
         onCancel: () => setIsProcessing(false),
       });
     } catch (err) {
