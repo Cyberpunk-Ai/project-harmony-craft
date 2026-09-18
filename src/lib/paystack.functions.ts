@@ -205,16 +205,13 @@ export const confirmPaystackPayment = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
 
-    let profileId = "user_me";
-    if (userId && userId !== "guest") {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("auth_user_id", userId)
-        .maybeSingle();
-      if (profile?.id) profileId = profile.id;
-      else profileId = userId;
-    }
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("auth_user_id", userId)
+      .maybeSingle();
+    if (!profile?.id) throw new Error("Sign in to confirm this payment.");
+    const profileId = String(profile.id);
 
     let tx: any = {};
     let meta: any = {};
