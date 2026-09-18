@@ -264,9 +264,10 @@ export const savePayoutDestination = createServerFn({ method: "POST" })
       verifiedAt: new Date().toISOString(),
     };
 
-    try {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      await (supabaseAdmin as any).from("monetization_settings").upsert(
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error: saveErr } = await (supabaseAdmin as any)
+      .from("monetization_settings")
+      .upsert(
         {
           user_id: profileId,
           payout_method: data.method,
@@ -274,8 +275,9 @@ export const savePayoutDestination = createServerFn({ method: "POST" })
         },
         { onConflict: "user_id" },
       );
-    } catch (dbErr) {
-      console.warn("Could not save monetization settings in Supabase DB:", dbErr);
+    if (saveErr) {
+      console.error("Could not save payout destination:", saveErr);
+      throw new Error("We couldn't save that withdrawal account. Please try again.");
     }
 
     return details;
