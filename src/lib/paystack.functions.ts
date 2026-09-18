@@ -129,30 +129,22 @@ export const startTipCheckout = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId, claims } = context as any;
 
-    let myProfileId = "user_me";
-    if (userId && userId !== "guest") {
-      const { data: me } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("auth_user_id", userId)
-        .maybeSingle();
-      if (me?.id) myProfileId = me.id;
-      else myProfileId = userId;
-    }
+    const { data: me } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("auth_user_id", userId)
+      .maybeSingle();
+    if (!me?.id) throw new Error("Complete your profile before sending a tip.");
+    const myProfileId = String(me.id);
 
     const cleanUsername = data.recipientUsername.replace(/^@/, "");
-    let recipientId = "";
     const { data: recipient } = await supabase
       .from("profiles")
       .select("id, username")
       .eq("username", cleanUsername)
       .maybeSingle();
-
-    if (recipient?.id) {
-      recipientId = recipient.id;
-    } else {
-      recipientId = `user_${cleanUsername}`;
-    }
+    if (!recipient?.id) throw new Error("We couldn't find that creator.");
+    const recipientId = String(recipient.id);
 
     if (recipientId === myProfileId) throw new Error("You can't tip yourself.");
 
@@ -161,49 +153,41 @@ export const startTipCheckout = createServerFn({ method: "POST" })
     const amount = Math.round(data.amount * USD_TO_KES) * 100;
     const reference = `tip_${crypto.randomUUID().replace(/-/g, "")}`;
 
-    let authUrl: string | undefined;
-    try {
-      const init = await paystack("/transaction/initialize", {
-        method: "POST",
-        body: JSON.stringify({
-          email,
-          amount,
-          currency,
-          reference,
-          callback_url: `${data.origin}/billing/callback`,
-          metadata: {
-            kind: "tip",
-            profile_id: myProfileId,
-            recipient_id: recipientId,
-            recipient_username: cleanUsername,
-            tip_usd: data.amount,
-            note: (data.message ?? "").slice(0, 240),
-            post_id: data.postId ?? null,
-          },
-        }),
-      });
-      authUrl = init.data?.authorization_url;
-    } catch (paystackErr) {
-      console.warn("Paystack initialize notice:", paystackErr);
-    }
-
-    try {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      await (supabaseAdmin as any).from("payments").insert({
-        user_id: myProfileId,
-        reference,
-        plan: "tip",
-        billing_cycle: "one_time",
+    const init = await paystack("/transaction/initialize", {
+      method: "POST",
+      body: JSON.stringify({
+        email,
         amount,
         currency,
-        email,
-        status: "pending",
-        authorization_url: authUrl ?? null,
-        raw: { recipient_username: cleanUsername, tip_usd: data.amount },
-      });
-    } catch (dbErr) {
-      console.warn("Could not insert pending payment in DB:", dbErr);
-    }
+        reference,
+        callback_url: `${data.origin}/billing/callback`,
+        metadata: {
+          kind: "tip",
+          profile_id: myProfileId,
+          recipient_id: recipientId,
+          recipient_username: cleanUsername,
+          tip_usd: data.amount,
+          note: (data.message ?? "").slice(0, 240),
+          post_id: data.postId ?? null,
+        },
+      }),
+    });
+    const authUrl = init.data?.authorization_url as string | undefined;
+    if (!authUrl) throw new Error("We couldn't open a secure checkout. Please try again.");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await (supabaseAdmin as any).from("payments").insert({
+      user_id: myProfileId,
+      reference,
+      plan: "tip",
+      billing_cycle: "one_time",
+      amount,
+      currency,
+      email,
+      status: "pending",
+      authorization_url: authUrl,
+      raw: { recipient_username: cleanUsername, recipient_id: recipientId, tip_usd: data.amount },
+    });
 
     return {
       authorizationUrl: authUrl,
