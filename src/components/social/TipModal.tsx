@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { Heart, DollarSign, Sparkles, Check, X, ShieldCheck } from "lucide-react";
 import { Avatar } from "@/components/social/Avatar";
 import { UserBadge } from "@/components/social/UserBadge";
-import { useMonetization } from "@/lib/monetization-state";
 import { useAuth } from "@/lib/auth-state";
 import { currentUser } from "@/lib/profile-service";
 import { useServerFn } from "@tanstack/react-start";
@@ -28,10 +27,9 @@ interface TipModalProps {
 
 const PRESET_AMOUNTS = [2, 5, 10, 25, 50];
 
-export function TipModal({ isOpen, onClose, recipient, postId, spaceId }: TipModalProps) {
+export function TipModal({ isOpen, onClose, recipient, postId }: TipModalProps) {
   const { user } = useAuth();
   const activeUser = user || currentUser;
-  const { sendTip } = useMonetization();
   const beginTip = useServerFn(startTipCheckout);
   const loadEarnings = useServerFn(getMyTipEarnings);
   const payout = useServerFn(requestTipPayout);
