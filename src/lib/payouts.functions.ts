@@ -317,19 +317,19 @@ export const requestPayout = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
 
-    try {
-      await admin.from("payouts").insert({
-        user_id: profileId,
-        amount,
-        method: String(settingsRow?.payout_method ?? details.method ?? "bank"),
-        status: "pending",
-        currency,
-        reference,
-        recipient_code: details.recipientCode,
-        destination,
-      });
-    } catch (insertErr) {
-      console.warn("Could not record payout row in DB:", insertErr);
+    const { error: insertErr } = await admin.from("payouts").insert({
+      user_id: profileId,
+      amount,
+      method: String(settingsRow?.payout_method ?? details.method ?? "bank"),
+      status: "pending",
+      currency,
+      reference,
+      recipient_code: details.recipientCode,
+      destination,
+    });
+    if (insertErr) {
+      console.error("Could not record payout row:", insertErr);
+      throw new Error("We couldn't start that withdrawal. Please try again.");
     }
 
     try {
@@ -339,37 +339,37 @@ export const requestPayout = createServerFn({ method: "POST" })
           source: "balance",
           amount: minorUnits,
           recipient: details.recipientCode,
-          reason: "Spaces creator payout",
+          reason: "Starpace creator payout",
           reference,
           currency,
         }),
       });
 
-      const status = String(transfer.data?.status ?? "pending");
-      try {
-        await admin
-          .from("payouts")
-          .update({
-            status: status === "success" ? "paid" : status,
-            transfer_code: transfer.data?.transfer_code ?? null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("reference", reference);
-      } catch {}
+      const raw = String(transfer.data?.status ?? "pending");
+      const status = raw === "success" ? "paid" : raw;
+      await admin
+        .from("payouts")
+        .update({
+          status,
+          transfer_code: transfer.data?.transfer_code ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("reference", reference);
 
-      return { reference, amount, status: status === "success" ? "paid" : status, destination };
+      return { reference, amount, status, destination };
     } catch (err: any) {
-      console.warn("Paystack transfer execution notice (processed):", err);
-      try {
-        await admin
-          .from("payouts")
-          .update({
-            status: "paid",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("reference", reference);
-      } catch {}
-      return { reference, amount, status: "paid", destination };
+      // Never report money as sent when the provider rejected the transfer.
+      const reason = err?.message ? String(err.message) : "Transfer failed";
+      console.error("Paystack transfer failed:", reason);
+      await admin
+        .from("payouts")
+        .update({
+          status: "failed",
+          failure_reason: reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("reference", reference);
+      throw new Error(`Your withdrawal couldn't be sent: ${reason}`);
     }
   });
 
