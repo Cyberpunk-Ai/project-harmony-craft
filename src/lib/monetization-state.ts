@@ -6,7 +6,6 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { signedInProfileId } from "@/lib/remote-store";
-import { sendTipApi } from "@/lib/api-client";
 import {
   getEarnings,
   listPayoutBanks,
@@ -225,7 +224,6 @@ export function useMonetization() {
 
   return {
     ...snapshot,
-    sendTip,
     requestPayout,
     saveDestination,
     loadBanks,
