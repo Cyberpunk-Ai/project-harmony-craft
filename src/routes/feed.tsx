@@ -24,13 +24,13 @@ export const Route = createFileRoute("/feed")({
   }),
   head: () => ({
     meta: [
-      { title: "Your Feed — Spaces" },
+      { title: "Your Feed — Starpace" },
       {
         name: "description",
         content:
           "Your Spaces home: share a moment, follow live Spaces, and see posts from the creators and communities you care about.",
       },
-      { property: "og:title", content: "Your Feed — Spaces" },
+      { property: "og:title", content: "Your Feed — Starpace" },
       {
         property: "og:description",
         content: "Share moments, join live Spaces, and discover creators on Spaces.",

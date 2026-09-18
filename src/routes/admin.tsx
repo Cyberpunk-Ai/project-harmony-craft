@@ -20,9 +20,9 @@ const AdminOverviewTab = lazy(() => import("@/components/admin/AdminOverviewTab"
 export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [
-      { title: "Admin Console — Spaces" },
+      { title: "Admin Console — Starpace" },
       { name: "description", content: "Moderation queue, user management, content review, audit logs and platform settings for Spaces administrators." },
-      { property: "og:title", content: "Admin Console — Spaces" },
+      { property: "og:title", content: "Admin Console — Starpace" },
       { property: "og:description", content: "Moderation, users, content, audit logs and platform settings." },
       { property: "og:type", content: "website" },
       { name: "robots", content: "noindex" },

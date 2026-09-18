@@ -12,13 +12,13 @@ export const Route = createFileRoute("/auth")({
     typeof search["email"] === "string" ? { email: search["email"] as string } : {},
   head: () => ({
     meta: [
-      { title: "Sign In or Join — Spaces" },
+      { title: "Sign In or Join — Starpace" },
       {
         name: "description",
         content:
           "Create your Spaces account or sign back in to post, join live audio rooms, message creators and tip the people you follow.",
       },
-      { property: "og:title", content: "Sign In or Join — Spaces" },
+      { property: "og:title", content: "Sign In or Join — Starpace" },
       {
         property: "og:description",
         content: "Create a Spaces account or sign in to post, chat and go live.",

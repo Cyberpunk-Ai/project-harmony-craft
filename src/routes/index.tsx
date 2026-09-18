@@ -34,17 +34,17 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Spaces — Where Your World Comes to Life" },
+      { title: "Starpace — Where Your World Comes to Life" },
       {
         name: "description",
         content:
           "Spaces is a social platform for creators and communities: smart feeds, live audio rooms, stories, and encrypted chat in one beautiful place.",
       },
-      { property: "og:title", content: "Spaces — Where Your World Comes to Life" },
+      { property: "og:title", content: "Starpace — Where Your World Comes to Life" },
       {
         property: "og:description",
         content:
-          "Share moments, join live audio rooms, and grow your audience on Spaces — the social home for creators and communities.",
+          "Share moments, join live audio rooms, and grow your audience on Starpace — the social home for creators and communities.",
       },
     ],
   }),
