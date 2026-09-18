@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { Heart, DollarSign, Sparkles, Check, X, ShieldCheck } from "lucide-react";
 import { Avatar } from "@/components/social/Avatar";
 import { UserBadge } from "@/components/social/UserBadge";
-import { useMonetization } from "@/lib/monetization-state";
 import { useAuth } from "@/lib/auth-state";
 import { currentUser } from "@/lib/profile-service";
 import { useServerFn } from "@tanstack/react-start";
@@ -28,10 +27,9 @@ interface TipModalProps {
 
 const PRESET_AMOUNTS = [2, 5, 10, 25, 50];
 
-export function TipModal({ isOpen, onClose, recipient, postId, spaceId }: TipModalProps) {
+export function TipModal({ isOpen, onClose, recipient, postId }: TipModalProps) {
   const { user } = useAuth();
   const activeUser = user || currentUser;
-  const { sendTip } = useMonetization();
   const beginTip = useServerFn(startTipCheckout);
   const loadEarnings = useServerFn(getMyTipEarnings);
   const payout = useServerFn(requestTipPayout);
@@ -71,66 +69,28 @@ export function TipModal({ isOpen, onClose, recipient, postId, spaceId }: TipMod
 
     setIsSubmitting(true);
     try {
-      // 1. Record tip in local and server monetization state
-      try {
-        await sendTip({
+      // The tip is only recorded once the payment provider confirms the charge.
+      const res = (await beginTip({
+        data: {
           recipientUsername: recipient.username,
           amount: effectiveAmount,
           message: message.trim() || undefined,
-          postId,
-          spaceId,
-          senderName: activeUser.display_name,
-          senderUsername: activeUser.username,
-          senderAvatar: activeUser.avatar_url || undefined,
-        });
-      } catch (monErr) {
-        console.warn("Monetization tip registration notice:", monErr);
+          postId: postId ?? null,
+          origin: window.location.origin,
+        },
+      })) as { authorizationUrl?: string; reference?: string };
+
+      if (!res?.authorizationUrl || !res.reference) {
+        throw new Error("We couldn't open a secure checkout. Please try again.");
       }
 
-      // 2. Initialize Paystack checkout session
-      try {
-        const res = (await beginTip({
-          data: {
-            recipientUsername: recipient.username,
-            amount: effectiveAmount,
-            message: message.trim() || undefined,
-            postId: postId ?? null,
-            origin: window.location.origin,
-          },
-        })) as { authorizationUrl?: string; reference?: string };
-
-        if (res?.authorizationUrl) {
-          openPaystackPayment({
-            authorizationUrl: res.authorizationUrl,
-            reference: res.reference || `tip_${Date.now()}`,
-            email: activeUser?.email || undefined,
-            amountInCents: Math.round(effectiveAmount * 130 * 100),
-            currency: "KES",
-            onSuccess: () => {
-              setIsSuccess(true);
-              toast.success(`You sent a tip of $${effectiveAmount.toFixed(2)} to @${recipient.username}! 🎉`);
-              setTimeout(() => {
-                setIsSuccess(false);
-                onClose();
-              }, 2500);
-            },
-            onCancel: () => setIsSubmitting(false),
-          });
-          return;
-        }
-      } catch (paystackErr) {
-        console.warn("Paystack checkout notice:", paystackErr);
-      }
-
-      setIsSuccess(true);
-      toast.success(`You sent a tip of $${effectiveAmount.toFixed(2)} to @${recipient.username}! 🎉`);
-      setTimeout(() => {
-        setIsSuccess(false);
-        onClose();
-      }, 2500);
+      openPaystackPayment({
+        authorizationUrl: res.authorizationUrl,
+        reference: res.reference,
+        onCancel: () => setIsSubmitting(false),
+      });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to send tip.");
-    } finally {
+      toast.error(err instanceof Error ? err.message : "We couldn't start that tip.");
       setIsSubmitting(false);
     }
   };

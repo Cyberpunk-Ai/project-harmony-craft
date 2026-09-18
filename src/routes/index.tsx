@@ -34,17 +34,17 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Spaces — Where Your World Comes to Life" },
+      { title: "Starpace — Where Your World Comes to Life" },
       {
         name: "description",
         content:
           "Spaces is a social platform for creators and communities: smart feeds, live audio rooms, stories, and encrypted chat in one beautiful place.",
       },
-      { property: "og:title", content: "Spaces — Where Your World Comes to Life" },
+      { property: "og:title", content: "Starpace — Where Your World Comes to Life" },
       {
         property: "og:description",
         content:
-          "Share moments, join live audio rooms, and grow your audience on Spaces — the social home for creators and communities.",
+          "Share moments, join live audio rooms, and grow your audience on Starpace — the social home for creators and communities.",
       },
     ],
   }),
@@ -204,7 +204,7 @@ function Nav() {
             <span className="flex h-8 w-8 items-center justify-center rounded-2xl bg-gradient-to-tr from-brand via-brand-pink to-brand-orange text-white shadow-soft group-hover:scale-105 transition-transform">
               <Sparkles className="h-4 w-4" />
             </span>
-            <span>Spaces</span>
+            <span>Starpace</span>
           </a>
 
           <div className="hidden items-center space-x-8 text-sm font-bold text-foreground/80 md:flex">
@@ -437,7 +437,7 @@ function PhoneMockup() {
         <div className="relative h-full w-full overflow-hidden rounded-[2.5rem] bg-white">
           <div className="absolute top-0 flex h-24 w-full items-start justify-between bg-gradient-to-br from-brand to-brand-pink p-6">
             <Sparkles className="h-5 w-5 text-white" />
-            <span className="text-lg font-bold text-white">Spaces</span>
+            <span className="text-lg font-bold text-white">Starpace</span>
             <Bell className="h-5 w-5 text-white" />
           </div>
           <div className="space-y-3 px-4 pt-28">
@@ -714,9 +714,9 @@ function Community() {
           </div>
         </Reveal>
         <Reveal className="order-1 space-y-6 md:order-2" delay={100}>
-          <p className="text-xs font-bold uppercase tracking-widest text-brand">Spaces</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-brand">Starpace</p>
           <h2 className="text-4xl font-bold sm:text-5xl">
-            Find your people in <span className="gradient-text">Spaces</span>
+            Find your people in <span className="gradient-text">Starpace</span>
           </h2>
           <p className="text-xl text-gray-600">
             Topic-based communities with live audio rooms, events, and shared collections. Drop in,
@@ -1087,7 +1087,7 @@ function Footer() {
       <div className="container mx-auto px-6">
         <div className="mb-20 grid gap-x-16 gap-y-12 md:grid-cols-6">
           <div className="md:col-span-2">
-            <p className="mb-4 text-2xl font-extrabold tracking-tight">Spaces</p>
+            <p className="mb-4 text-2xl font-extrabold tracking-tight">Starpace</p>
             <p className="max-w-xs text-gray-500">
               The next-generation social platform built for creators and communities.
             </p>

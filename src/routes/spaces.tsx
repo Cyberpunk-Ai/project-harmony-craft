@@ -54,13 +54,13 @@ export const Route = createFileRoute("/spaces")({
   }),
   head: () => ({
     meta: [
-      { title: "Spaces — Live Audio Rooms" },
+      { title: "Live Audio Rooms — Starpace" },
       {
         name: "description",
         content:
           "Join live audio Spaces: design clinics, photography workshops, and creator conversations happening right now.",
       },
-      { property: "og:title", content: "Spaces — Live Audio Rooms" },
+      { property: "og:title", content: "Live Audio Rooms — Starpace" },
       {
         property: "og:description",
         content: "Live audio rooms for creators: join, listen, or host your own Space.",

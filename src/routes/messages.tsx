@@ -59,13 +59,13 @@ export const Route = createFileRoute("/messages")({
   }),
   head: () => ({
     meta: [
-      { title: "Messages — Spaces" },
+      { title: "Messages — Starpace" },
       {
         name: "description",
         content:
           "Private, fast conversations on Spaces. Catch up with collaborators, share frames, and keep every thread in one calm inbox.",
       },
-      { property: "og:title", content: "Messages — Spaces" },
+      { property: "og:title", content: "Messages — Starpace" },
       {
         property: "og:description",
         content: "Private, fast conversations with the people you create with on Spaces.",

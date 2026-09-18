@@ -232,28 +232,25 @@ export const savePayoutDestination = createServerFn({ method: "POST" })
     const profileId = await myProfileId(supabase, userId);
     const currency = payoutCurrency();
 
-    let recipientCode = `RCP_${crypto.randomUUID().replace(/-/g, "").slice(0, 14)}`;
+    let recipientCode = "";
     let accountName = data.accountName.trim();
 
-    try {
-      const recipient = await paystack("/transferrecipient", {
-        method: "POST",
-        body: JSON.stringify({
-          type: data.method === "mobile_money" ? "mobile_money" : "nuban",
-          name: accountName,
-          account_number: data.accountNumber.trim(),
-          bank_code: data.bankCode,
-          currency,
-        }),
-      });
-      if (recipient.data?.recipient_code) {
-        recipientCode = recipient.data.recipient_code;
-      }
-      if (recipient.data?.details?.account_name) {
-        accountName = recipient.data.details.account_name;
-      }
-    } catch (err) {
-      console.warn("Paystack recipient register notice (using sandbox verification):", err);
+    const recipient = await paystack("/transferrecipient", {
+      method: "POST",
+      body: JSON.stringify({
+        type: data.method === "mobile_money" ? "mobile_money" : "nuban",
+        name: accountName,
+        account_number: data.accountNumber.trim(),
+        bank_code: data.bankCode,
+        currency,
+      }),
+    });
+    recipientCode = String(recipient.data?.recipient_code ?? "");
+    if (!recipientCode) {
+      throw new Error("We couldn't verify that account. Check the details and try again.");
+    }
+    if (recipient.data?.details?.account_name) {
+      accountName = recipient.data.details.account_name;
     }
 
     const details = {
@@ -267,9 +264,10 @@ export const savePayoutDestination = createServerFn({ method: "POST" })
       verifiedAt: new Date().toISOString(),
     };
 
-    try {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      await (supabaseAdmin as any).from("monetization_settings").upsert(
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error: saveErr } = await (supabaseAdmin as any)
+      .from("monetization_settings")
+      .upsert(
         {
           user_id: profileId,
           payout_method: data.method,
@@ -277,8 +275,9 @@ export const savePayoutDestination = createServerFn({ method: "POST" })
         },
         { onConflict: "user_id" },
       );
-    } catch (dbErr) {
-      console.warn("Could not save monetization settings in Supabase DB:", dbErr);
+    if (saveErr) {
+      console.error("Could not save payout destination:", saveErr);
+      throw new Error("We couldn't save that withdrawal account. Please try again.");
     }
 
     return details;
@@ -318,19 +317,19 @@ export const requestPayout = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
 
-    try {
-      await admin.from("payouts").insert({
-        user_id: profileId,
-        amount,
-        method: String(settingsRow?.payout_method ?? details.method ?? "bank"),
-        status: "pending",
-        currency,
-        reference,
-        recipient_code: details.recipientCode,
-        destination,
-      });
-    } catch (insertErr) {
-      console.warn("Could not record payout row in DB:", insertErr);
+    const { error: insertErr } = await admin.from("payouts").insert({
+      user_id: profileId,
+      amount,
+      method: String(settingsRow?.payout_method ?? details.method ?? "bank"),
+      status: "pending",
+      currency,
+      reference,
+      recipient_code: details.recipientCode,
+      destination,
+    });
+    if (insertErr) {
+      console.error("Could not record payout row:", insertErr);
+      throw new Error("We couldn't start that withdrawal. Please try again.");
     }
 
     try {
@@ -340,37 +339,37 @@ export const requestPayout = createServerFn({ method: "POST" })
           source: "balance",
           amount: minorUnits,
           recipient: details.recipientCode,
-          reason: "Spaces creator payout",
+          reason: "Starpace creator payout",
           reference,
           currency,
         }),
       });
 
-      const status = String(transfer.data?.status ?? "pending");
-      try {
-        await admin
-          .from("payouts")
-          .update({
-            status: status === "success" ? "paid" : status,
-            transfer_code: transfer.data?.transfer_code ?? null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("reference", reference);
-      } catch {}
+      const raw = String(transfer.data?.status ?? "pending");
+      const status = raw === "success" ? "paid" : raw;
+      await admin
+        .from("payouts")
+        .update({
+          status,
+          transfer_code: transfer.data?.transfer_code ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("reference", reference);
 
-      return { reference, amount, status: status === "success" ? "paid" : status, destination };
+      return { reference, amount, status, destination };
     } catch (err: any) {
-      console.warn("Paystack transfer execution notice (processed):", err);
-      try {
-        await admin
-          .from("payouts")
-          .update({
-            status: "paid",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("reference", reference);
-      } catch {}
-      return { reference, amount, status: "paid", destination };
+      // Never report money as sent when the provider rejected the transfer.
+      const reason = err?.message ? String(err.message) : "Transfer failed";
+      console.error("Paystack transfer failed:", reason);
+      await admin
+        .from("payouts")
+        .update({
+          status: "failed",
+          failure_reason: reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("reference", reference);
+      throw new Error(`Your withdrawal couldn't be sent: ${reason}`);
     }
   });
 

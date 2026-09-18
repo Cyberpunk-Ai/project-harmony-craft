@@ -12,13 +12,13 @@ export const Route = createFileRoute("/auth")({
     typeof search["email"] === "string" ? { email: search["email"] as string } : {},
   head: () => ({
     meta: [
-      { title: "Sign In or Join — Spaces" },
+      { title: "Sign In or Join — Starpace" },
       {
         name: "description",
         content:
           "Create your Spaces account or sign back in to post, join live audio rooms, message creators and tip the people you follow.",
       },
-      { property: "og:title", content: "Sign In or Join — Spaces" },
+      { property: "og:title", content: "Sign In or Join — Starpace" },
       {
         property: "og:description",
         content: "Create a Spaces account or sign in to post, chat and go live.",
@@ -223,7 +223,7 @@ function AuthPage() {
               onClick={() => void navigate({ to: "/" })}
               className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand to-brand-pink py-2.5 text-sm font-bold text-white shadow-sm hover:opacity-95 active:scale-98 transition-all"
             >
-              <span>Continue to Spaces</span>
+              <span>Continue to Starpace</span>
               <ArrowRight className="h-4 w-4" />
             </button>
 

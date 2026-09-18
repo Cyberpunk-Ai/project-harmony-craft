@@ -6,7 +6,6 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { signedInProfileId } from "@/lib/remote-store";
-import { sendTipApi } from "@/lib/api-client";
 import {
   getEarnings,
   listPayoutBanks,
@@ -188,16 +187,9 @@ export function useMonetization() {
     };
   }, []);
 
-  const sendTip = useCallback(async (input: SendTipInput) => {
-    await sendTipApi({
-      recipientUsername: input.recipientUsername,
-      amount: input.amount,
-      message: input.message,
-      postId: input.postId,
-      spaceId: input.spaceId,
-    });
-    await refreshMonetization();
-  }, []);
+  // Tips are created by the payment provider flow (checkout → confirmation),
+  // never written directly from the browser.
+
 
   const requestPayout = useCallback(async (amount?: number) => {
     const result = await requestPayoutApi({ data: { amount } });
@@ -232,7 +224,6 @@ export function useMonetization() {
 
   return {
     ...snapshot,
-    sendTip,
     requestPayout,
     saveDestination,
     loadBanks,

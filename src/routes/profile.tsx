@@ -46,13 +46,13 @@ export const Route = createFileRoute("/profile")({
   }),
   head: () => ({
     meta: [
-      { title: "Profile — Spaces" },
+      { title: "Profile — Starpace" },
       {
         name: "description",
         content:
           "Creator profile on Spaces: posts, replies, media and live audio rooms with follower stats and custom branding.",
       },
-      { property: "og:title", content: "Profile — Spaces" },
+      { property: "og:title", content: "Profile — Starpace" },
       { property: "og:description", content: "Discover creator profiles, posts, and live audio rooms on Spaces." },
     ],
   }),

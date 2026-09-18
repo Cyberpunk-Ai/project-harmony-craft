@@ -129,30 +129,22 @@ export const startTipCheckout = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId, claims } = context as any;
 
-    let myProfileId = "user_me";
-    if (userId && userId !== "guest") {
-      const { data: me } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("auth_user_id", userId)
-        .maybeSingle();
-      if (me?.id) myProfileId = me.id;
-      else myProfileId = userId;
-    }
+    const { data: me } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("auth_user_id", userId)
+      .maybeSingle();
+    if (!me?.id) throw new Error("Complete your profile before sending a tip.");
+    const myProfileId = String(me.id);
 
     const cleanUsername = data.recipientUsername.replace(/^@/, "");
-    let recipientId = "";
     const { data: recipient } = await supabase
       .from("profiles")
       .select("id, username")
       .eq("username", cleanUsername)
       .maybeSingle();
-
-    if (recipient?.id) {
-      recipientId = recipient.id;
-    } else {
-      recipientId = `user_${cleanUsername}`;
-    }
+    if (!recipient?.id) throw new Error("We couldn't find that creator.");
+    const recipientId = String(recipient.id);
 
     if (recipientId === myProfileId) throw new Error("You can't tip yourself.");
 
@@ -161,49 +153,41 @@ export const startTipCheckout = createServerFn({ method: "POST" })
     const amount = Math.round(data.amount * USD_TO_KES) * 100;
     const reference = `tip_${crypto.randomUUID().replace(/-/g, "")}`;
 
-    let authUrl: string | undefined;
-    try {
-      const init = await paystack("/transaction/initialize", {
-        method: "POST",
-        body: JSON.stringify({
-          email,
-          amount,
-          currency,
-          reference,
-          callback_url: `${data.origin}/billing/callback`,
-          metadata: {
-            kind: "tip",
-            profile_id: myProfileId,
-            recipient_id: recipientId,
-            recipient_username: cleanUsername,
-            tip_usd: data.amount,
-            note: (data.message ?? "").slice(0, 240),
-            post_id: data.postId ?? null,
-          },
-        }),
-      });
-      authUrl = init.data?.authorization_url;
-    } catch (paystackErr) {
-      console.warn("Paystack initialize notice:", paystackErr);
-    }
-
-    try {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      await (supabaseAdmin as any).from("payments").insert({
-        user_id: myProfileId,
-        reference,
-        plan: "tip",
-        billing_cycle: "one_time",
+    const init = await paystack("/transaction/initialize", {
+      method: "POST",
+      body: JSON.stringify({
+        email,
         amount,
         currency,
-        email,
-        status: "pending",
-        authorization_url: authUrl ?? null,
-        raw: { recipient_username: cleanUsername, tip_usd: data.amount },
-      });
-    } catch (dbErr) {
-      console.warn("Could not insert pending payment in DB:", dbErr);
-    }
+        reference,
+        callback_url: `${data.origin}/billing/callback`,
+        metadata: {
+          kind: "tip",
+          profile_id: myProfileId,
+          recipient_id: recipientId,
+          recipient_username: cleanUsername,
+          tip_usd: data.amount,
+          note: (data.message ?? "").slice(0, 240),
+          post_id: data.postId ?? null,
+        },
+      }),
+    });
+    const authUrl = init.data?.authorization_url as string | undefined;
+    if (!authUrl) throw new Error("We couldn't open a secure checkout. Please try again.");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await (supabaseAdmin as any).from("payments").insert({
+      user_id: myProfileId,
+      reference,
+      plan: "tip",
+      billing_cycle: "one_time",
+      amount,
+      currency,
+      email,
+      status: "pending",
+      authorization_url: authUrl,
+      raw: { recipient_username: cleanUsername, recipient_id: recipientId, tip_usd: data.amount },
+    });
 
     return {
       authorizationUrl: authUrl,
@@ -221,16 +205,13 @@ export const confirmPaystackPayment = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
 
-    let profileId = "user_me";
-    if (userId && userId !== "guest") {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("auth_user_id", userId)
-        .maybeSingle();
-      if (profile?.id) profileId = profile.id;
-      else profileId = userId;
-    }
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("auth_user_id", userId)
+      .maybeSingle();
+    if (!profile?.id) throw new Error("Sign in to confirm this payment.");
+    const profileId = String(profile.id);
 
     let tx: any = {};
     let meta: any = {};
@@ -249,7 +230,7 @@ export const confirmPaystackPayment = createServerFn({ method: "POST" })
       );
     }
 
-    if (meta.profile_id && meta.profile_id !== profileId && profileId !== "user_me" && meta.profile_id !== "user_me") {
+    if (meta.profile_id && String(meta.profile_id) !== profileId) {
       throw new Error("This payment belongs to another account.");
     }
 
@@ -258,8 +239,17 @@ export const confirmPaystackPayment = createServerFn({ method: "POST" })
     const cycle = (meta.billing_cycle as BillingCycle) ?? "annual";
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as any;
 
-    await (supabaseAdmin as any)
+    // The webhook may already have settled this reference; don't record it twice.
+    const { data: existing } = await admin
+      .from("payments")
+      .select("status")
+      .eq("reference", data.reference)
+      .maybeSingle();
+    const alreadySettled = existing?.status === "success";
+
+    await admin
       .from("payments")
       .update({
         status: success ? "success" : (tx.status ?? "failed"),
@@ -273,28 +263,21 @@ export const confirmPaystackPayment = createServerFn({ method: "POST" })
     }
 
     if (isTip) {
-      const admin = supabaseAdmin as any;
-      try {
-        const { data: already } = await admin
-          .from("tips")
-          .select("id")
-          .eq("message", `${meta.note ?? ""}`)
-          .eq("from_user_id", profileId)
-          .eq("to_user_id", meta.recipient_id)
-          .eq("amount", meta.tip_usd)
-          .limit(1);
-
-        if (!already?.length) {
-          await admin.from("tips").insert({
-            from_user_id: profileId,
-            to_user_id: meta.recipient_id,
-            amount: meta.tip_usd,
-            message: meta.note ?? "",
-            post_id: meta.post_id ?? null,
-          });
-        }
-      } catch (tipErr) {
-        console.warn("Tip recording notice:", tipErr);
+      if (!alreadySettled && meta.recipient_id) {
+        const { error: tipErr } = await admin.from("tips").insert({
+          from_user_id: profileId,
+          to_user_id: meta.recipient_id,
+          amount: meta.tip_usd,
+          message: meta.note ?? "",
+          post_id: meta.post_id ?? null,
+        });
+        if (tipErr) console.error("Tip recording failed:", tipErr);
+        await admin.from("notifications").insert({
+          recipient_id: meta.recipient_id,
+          actor_id: profileId,
+          type: "tip",
+          body: `sent you a $${Number(meta.tip_usd ?? 0)} tip`,
+        });
       }
 
       return {
@@ -307,31 +290,33 @@ export const confirmPaystackPayment = createServerFn({ method: "POST" })
       };
     }
 
-    try {
-      await (supabaseAdmin as any).from("profiles").update({ plan }).eq("id", profileId);
-      await (supabaseAdmin as any).from("subscriptions").upsert(
-        {
-          user_id: profileId,
-          plan,
-          billing_cycle: cycle,
-          status: "active",
-          provider: "paystack",
-          provider_customer_id: tx.customer?.customer_code ?? null,
-          renews_at: new Date(
-            Date.now() + (cycle === "annual" ? 365 : 30) * 86400000,
-          ).toISOString(),
-          payment_method: tx.authorization
-            ? {
-                brand: tx.authorization.card_type ?? tx.authorization.channel ?? "card",
-                last4: tx.authorization.last4 ?? "",
-                exp: `${tx.authorization.exp_month ?? ""}/${tx.authorization.exp_year ?? ""}`,
-              }
-            : {},
-        },
-        { onConflict: "user_id" },
+    const { error: planErr } = await admin.from("profiles").update({ plan }).eq("id", profileId);
+    const { error: subErr } = await admin.from("subscriptions").upsert(
+      {
+        user_id: profileId,
+        plan,
+        billing_cycle: cycle,
+        status: "active",
+        provider: "paystack",
+        provider_customer_id: tx.customer?.customer_code ?? null,
+        renews_at: new Date(
+          Date.now() + (cycle === "annual" ? 365 : 30) * 86400000,
+        ).toISOString(),
+        payment_method: tx.authorization
+          ? {
+              brand: tx.authorization.card_type ?? tx.authorization.channel ?? "card",
+              last4: tx.authorization.last4 ?? "",
+              exp: `${tx.authorization.exp_month ?? ""}/${tx.authorization.exp_year ?? ""}`,
+            }
+          : {},
+      },
+      { onConflict: "user_id" },
+    );
+    if (planErr || subErr) {
+      console.error("Plan activation failed:", planErr ?? subErr);
+      throw new Error(
+        "Your payment went through but we couldn't activate the plan. Please contact support — nothing else was charged.",
       );
-    } catch (subErr) {
-      console.warn("Subscription row notice:", subErr);
     }
 
     return { status: "success" as const, kind: "plan" as const, plan, cycle };
