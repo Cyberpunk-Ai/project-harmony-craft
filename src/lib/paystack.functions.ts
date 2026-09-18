@@ -230,7 +230,7 @@ export const confirmPaystackPayment = createServerFn({ method: "POST" })
       );
     }
 
-    if (meta.profile_id && meta.profile_id !== profileId && profileId !== "user_me" && meta.profile_id !== "user_me") {
+    if (meta.profile_id && String(meta.profile_id) !== profileId) {
       throw new Error("This payment belongs to another account.");
     }
 
