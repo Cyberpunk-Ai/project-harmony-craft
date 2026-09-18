@@ -239,8 +239,17 @@ export const confirmPaystackPayment = createServerFn({ method: "POST" })
     const cycle = (meta.billing_cycle as BillingCycle) ?? "annual";
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as any;
 
-    await (supabaseAdmin as any)
+    // The webhook may already have settled this reference; don't record it twice.
+    const { data: existing } = await admin
+      .from("payments")
+      .select("status")
+      .eq("reference", data.reference)
+      .maybeSingle();
+    const alreadySettled = existing?.status === "success";
+
+    await admin
       .from("payments")
       .update({
         status: success ? "success" : (tx.status ?? "failed"),
@@ -254,28 +263,21 @@ export const confirmPaystackPayment = createServerFn({ method: "POST" })
     }
 
     if (isTip) {
-      const admin = supabaseAdmin as any;
-      try {
-        const { data: already } = await admin
-          .from("tips")
-          .select("id")
-          .eq("message", `${meta.note ?? ""}`)
-          .eq("from_user_id", profileId)
-          .eq("to_user_id", meta.recipient_id)
-          .eq("amount", meta.tip_usd)
-          .limit(1);
-
-        if (!already?.length) {
-          await admin.from("tips").insert({
-            from_user_id: profileId,
-            to_user_id: meta.recipient_id,
-            amount: meta.tip_usd,
-            message: meta.note ?? "",
-            post_id: meta.post_id ?? null,
-          });
-        }
-      } catch (tipErr) {
-        console.warn("Tip recording notice:", tipErr);
+      if (!alreadySettled && meta.recipient_id) {
+        const { error: tipErr } = await admin.from("tips").insert({
+          from_user_id: profileId,
+          to_user_id: meta.recipient_id,
+          amount: meta.tip_usd,
+          message: meta.note ?? "",
+          post_id: meta.post_id ?? null,
+        });
+        if (tipErr) console.error("Tip recording failed:", tipErr);
+        await admin.from("notifications").insert({
+          recipient_id: meta.recipient_id,
+          actor_id: profileId,
+          type: "tip",
+          body: `sent you a $${Number(meta.tip_usd ?? 0)} tip`,
+        });
       }
 
       return {
