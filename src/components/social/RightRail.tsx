@@ -289,7 +289,7 @@ export function RailFooter() {
             {l}
           </button>
         ))}
-        <span className="mt-2 block">© 2026 Spaces</span>
+        <span className="mt-2 block">© 2026 Starpace</span>
       </p>
 
       <InfoModal
