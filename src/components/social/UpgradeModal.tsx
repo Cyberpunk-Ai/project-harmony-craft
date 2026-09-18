@@ -49,9 +49,7 @@ export function UpgradeModal() {
     };
 
     window.addEventListener("spaces:open-upgrade-modal", handleOpen);
-    window.addEventListener("spaces:open-upgrade-modal", handleOpen);
     return () => {
-      window.removeEventListener("spaces:open-upgrade-modal", handleOpen);
       window.removeEventListener("spaces:open-upgrade-modal", handleOpen);
     };
   }, []);
