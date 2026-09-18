@@ -290,31 +290,33 @@ export const confirmPaystackPayment = createServerFn({ method: "POST" })
       };
     }
 
-    try {
-      await (supabaseAdmin as any).from("profiles").update({ plan }).eq("id", profileId);
-      await (supabaseAdmin as any).from("subscriptions").upsert(
-        {
-          user_id: profileId,
-          plan,
-          billing_cycle: cycle,
-          status: "active",
-          provider: "paystack",
-          provider_customer_id: tx.customer?.customer_code ?? null,
-          renews_at: new Date(
-            Date.now() + (cycle === "annual" ? 365 : 30) * 86400000,
-          ).toISOString(),
-          payment_method: tx.authorization
-            ? {
-                brand: tx.authorization.card_type ?? tx.authorization.channel ?? "card",
-                last4: tx.authorization.last4 ?? "",
-                exp: `${tx.authorization.exp_month ?? ""}/${tx.authorization.exp_year ?? ""}`,
-              }
-            : {},
-        },
-        { onConflict: "user_id" },
+    const { error: planErr } = await admin.from("profiles").update({ plan }).eq("id", profileId);
+    const { error: subErr } = await admin.from("subscriptions").upsert(
+      {
+        user_id: profileId,
+        plan,
+        billing_cycle: cycle,
+        status: "active",
+        provider: "paystack",
+        provider_customer_id: tx.customer?.customer_code ?? null,
+        renews_at: new Date(
+          Date.now() + (cycle === "annual" ? 365 : 30) * 86400000,
+        ).toISOString(),
+        payment_method: tx.authorization
+          ? {
+              brand: tx.authorization.card_type ?? tx.authorization.channel ?? "card",
+              last4: tx.authorization.last4 ?? "",
+              exp: `${tx.authorization.exp_month ?? ""}/${tx.authorization.exp_year ?? ""}`,
+            }
+          : {},
+      },
+      { onConflict: "user_id" },
+    );
+    if (planErr || subErr) {
+      console.error("Plan activation failed:", planErr ?? subErr);
+      throw new Error(
+        "Your payment went through but we couldn't activate the plan. Please contact support — nothing else was charged.",
       );
-    } catch (subErr) {
-      console.warn("Subscription row notice:", subErr);
     }
 
     return { status: "success" as const, kind: "plan" as const, plan, cycle };
