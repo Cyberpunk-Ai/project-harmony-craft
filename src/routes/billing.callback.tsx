@@ -8,15 +8,15 @@ import { confirmPaystackPayment } from "@/lib/paystack.functions";
 export const Route = createFileRoute("/billing/callback")({
   head: () => ({
     meta: [
-      { title: "Confirming your payment — Lumen" },
+      { title: "Confirming your payment — Starpace" },
       {
         name: "description",
-        content: "We're confirming your Lumen membership payment and activating your plan.",
+        content: "We're confirming your Starpace membership payment and activating your plan.",
       },
-      { property: "og:title", content: "Confirming your payment — Lumen" },
+      { property: "og:title", content: "Confirming your payment — Starpace" },
       {
         property: "og:description",
-        content: "We're confirming your Lumen membership payment and activating your plan.",
+        content: "We're confirming your Starpace membership payment and activating your plan.",
       },
       { name: "robots", content: "noindex" },
     ],
