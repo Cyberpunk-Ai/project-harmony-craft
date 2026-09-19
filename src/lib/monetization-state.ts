@@ -1,32 +1,16 @@
 /**
- * Creator earnings state. Everything here comes from the backend — balances are
- * derived from real recorded tips and real payouts, and withdrawals go through
- * the payment provider. No local seeding, no cached fake ledger.
+ * Creator earnings state. Everything comes from the backend — balances are
+ * derived from real recorded tips and real withdrawal requests. The app never
+ * asks for or stores bank or mobile-money details.
  */
 import { useCallback, useEffect, useState } from "react";
 
 import { signedInProfileId } from "@/lib/remote-store";
 import {
   getEarnings,
-  listPayoutBanks,
-  refreshPayoutStatus,
   requestPayout as requestPayoutApi,
-  savePayoutDestination,
+  saveTipSettings as saveTipSettingsApi,
 } from "@/lib/payouts.functions";
-
-/** Withdrawal rails supported by the payment provider. */
-export type PayoutMethod = "bank" | "mobile_money";
-
-export interface PayoutDestination {
-  method: PayoutMethod;
-  accountName: string;
-  accountNumberLast4: string;
-  bankCode: string;
-  bankName: string;
-  recipientCode?: string | null;
-  currency?: string;
-  verifiedAt?: string;
-}
 
 export interface TipRecord {
   id: string;
@@ -41,10 +25,8 @@ export interface TipRecord {
 export interface PayoutRecord {
   id: string;
   amount: number;
-  method: string;
   status: string;
   reference: string | null;
-  destination: string | null;
   failureReason: string | null;
   date: string;
 }
@@ -54,45 +36,27 @@ export interface MonetizationSettings {
   tipsEnabled: boolean;
 }
 
-export interface SendTipInput {
-  recipientUsername: string;
-  amount: number;
-  message?: string;
-  senderName: string;
-  senderUsername: string;
-  senderAvatar?: string;
-  postId?: string;
-  spaceId?: string;
-}
-
-export interface PayoutBank {
-  name: string;
-  code: string;
-  type: string;
-  isMobileMoney: boolean;
-}
-
 interface MonetizationState {
   loading: boolean;
+  error: string | null;
   totalEarnings: number;
   pendingBalance: number;
   currency: string;
+  minimumPayout: number;
   tipsReceived: TipRecord[];
   payouts: PayoutRecord[];
-  activePayoutMethod: PayoutMethod;
-  destination: PayoutDestination | null;
   settings: MonetizationSettings;
 }
 
 const EMPTY: MonetizationState = {
   loading: true,
+  error: null,
   totalEarnings: 0,
   pendingBalance: 0,
   currency: "KES",
+  minimumPayout: 10,
   tipsReceived: [],
   payouts: [],
-  activePayoutMethod: "bank",
-  destination: null,
   settings: { minimumTip: 1, tipsEnabled: true },
 };
 
@@ -114,12 +78,13 @@ export async function refreshMonetization() {
   inFlight = (async () => {
     try {
       const data = await getEarnings();
-      const paystack = (data.settings?.paystack ?? {}) as Partial<PayoutDestination>;
       publish({
         loading: false,
+        error: null,
         totalEarnings: data.totalEarnings,
         pendingBalance: data.pendingBalance,
         currency: data.currency,
+        minimumPayout: data.minimumPayout,
         tipsReceived: data.tips.map((t) => ({
           id: t.id,
           senderName: t.senderName,
@@ -132,22 +97,22 @@ export async function refreshMonetization() {
         payouts: data.payouts.map((p) => ({
           id: p.id,
           amount: p.amount,
-          method: p.method,
           status: p.status,
           reference: p.reference,
-          destination: p.destination,
           failureReason: p.failureReason,
           date: new Date(p.createdAt).toLocaleDateString(),
         })),
-        activePayoutMethod: (data.settings?.payoutMethod ?? "bank") as PayoutMethod,
-        destination: paystack?.recipientCode ? (paystack as PayoutDestination) : null,
         settings: {
-          minimumTip: data.settings?.minimumTip ?? 1,
-          tipsEnabled: data.settings?.tipsEnabled ?? true,
+          minimumTip: data.settings.minimumTip,
+          tipsEnabled: data.settings.tipsEnabled,
         },
       });
-    } catch {
-      publish({ ...state, loading: false });
+    } catch (err: any) {
+      publish({
+        ...state,
+        loading: false,
+        error: err?.message || "We couldn't load your earnings. Please try again.",
+      });
     } finally {
       inFlight = null;
     }
@@ -190,44 +155,25 @@ export function useMonetization() {
   // Tips are created by the payment provider flow (checkout → confirmation),
   // never written directly from the browser.
 
-
-  const requestPayout = useCallback(async (amount?: number) => {
-    const result = await requestPayoutApi({ data: { amount } });
+  const requestPayout = useCallback(async (amount?: number, note?: string) => {
+    const result = await requestPayoutApi({ data: { amount, note } });
     await refreshMonetization();
     return result;
   }, []);
 
-  const saveDestination = useCallback(
-    async (input: {
-      method: PayoutMethod;
-      accountName: string;
-      accountNumber: string;
-      bankCode: string;
-      bankName: string;
-    }) => {
-      const details = await savePayoutDestination({ data: input });
+  const saveTipSettings = useCallback(
+    async (input: { minimumTip: number; tipsEnabled: boolean }) => {
+      const result = await saveTipSettingsApi({ data: input });
       await refreshMonetization();
-      return details;
+      return result;
     },
     [],
   );
 
-  const loadBanks = useCallback(async (): Promise<PayoutBank[]> => {
-    return (await listPayoutBanks()) as PayoutBank[];
-  }, []);
-
-  const checkPayout = useCallback(async (reference: string) => {
-    const result = await refreshPayoutStatus({ data: { reference } });
-    await refreshMonetization();
-    return result;
-  }, []);
-
   return {
     ...snapshot,
     requestPayout,
-    saveDestination,
-    loadBanks,
-    checkPayout,
+    saveTipSettings,
     refresh: refreshMonetization,
   };
 }

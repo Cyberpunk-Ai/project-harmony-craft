@@ -5,6 +5,7 @@ import { AdminAuditLogsTab } from "@/components/admin/AdminAuditLogsTab";
 import { AdminContentTab } from "@/components/admin/AdminContentTab";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { AdminModerationTab } from "@/components/admin/AdminModerationTab";
+import { AdminPayoutsTab } from "@/components/admin/AdminPayoutsTab";
 import { AdminSystemSettingsTab } from "@/components/admin/AdminSystemSettingsTab";
 import { AdminUsersTab } from "@/components/admin/AdminUsersTab";
 import { getAdminOverview } from "@/lib/api-client";
@@ -32,7 +33,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-const TABS = ["overview", "users", "content", "moderation", "audit", "settings"] as const;
+const TABS = ["overview", "users", "content", "moderation", "withdrawals", "audit", "settings"] as const;
 
 function AdminPage() {
   const { user } = useAuth();
@@ -148,6 +149,7 @@ function AdminPage() {
       {tab === "users" && <AdminUsersTab activeRole={activeRole} currentUserId={profile.id} />}
       {tab === "content" && <AdminContentTab activeRole={activeRole} currentUserId={profile.id} />}
       {tab === "moderation" && <AdminModerationTab activeRole={activeRole} currentUserId={profile.id} />}
+      {tab === "withdrawals" && <AdminPayoutsTab />}
       {tab === "audit" && <AdminAuditLogsTab activeRole={activeRole} />}
       {tab === "settings" && <AdminSystemSettingsTab activeRole={activeRole} currentUserId={profile.id} />}
     </div>
