@@ -17,7 +17,6 @@ import {
   X,
   Sun,
   Moon,
-  ShieldCheck,
 } from "lucide-react";
 import { Avatar } from "@/components/social/Avatar";
 import { UserBadge } from "@/components/social/UserBadge";
@@ -29,7 +28,6 @@ import { PLAN_DETAILS } from "@/lib/plans";
 import { useUnreadCounts } from "@/lib/unread-state";
 import { useTheme, ACCENT_PALETTES, type ThemeAccent } from "@/lib/theme-state";
 import { UpgradeModal } from "@/components/social/UpgradeModal";
-import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 // The admin console is reached only by going to /admin directly, and access is
@@ -91,7 +89,6 @@ function Sidebar({
   const { currentPlan, isPlus, isPro } = usePlan();
   const { user, signOut } = useAuth();
   const { isDark, toggleTheme, accent: currentAccent, setAccent } = useTheme();
-  const hasConsoleAccess = useConsoleAccess();
   const planInfo = PLAN_DETAILS[currentPlan] || PLAN_DETAILS.free;
   const activeUser = user || currentUser;
 
@@ -116,10 +113,6 @@ function Sidebar({
     { label: "Profile", to: "/profile", icon: User },
     { label: "Settings", to: "/settings", icon: Settings },
   ];
-
-  if (hasConsoleAccess) {
-    navItems.push({ label: "Admin", to: "/admin", icon: ShieldCheck });
-  }
 
   const accentKeys: ThemeAccent[] = ["violet", "amber", "emerald", "rose", "indigo"];
 
