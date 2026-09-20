@@ -50,7 +50,9 @@ export function getPreferencesStatus() {
 
 export function subscribePreferences(fn: () => void) {
   listeners.add(fn);
-  return () => listeners.delete(fn);
+  return () => {
+    listeners.delete(fn);
+  };
 }
 
 /** Loads the signed-in account's saved preferences (once per account). */
