@@ -122,6 +122,18 @@ export function AdminUsersTab({ activeRole, currentUserId }: AdminUsersTabProps)
     }
   };
 
+  /** Grants or removes a paid plan for a member (administrators only). */
+  const handlePlanChange = async (user: Profile, plan: string) => {
+    if (plan === (user.plan || "free")) return;
+    try {
+      const updated = await updateUserAdmin(user.id, { plan }, currentUserId);
+      setUsers((prev) => prev.map((u) => (u.id === user.id ? updated : u)));
+      showNotice(`@${user.username} is now on the ${plan} plan`);
+    } catch (err: any) {
+      toast.error(err.message || "Could not change that plan. Please try again.");
+    }
+  };
+
   const showNotice = (msg: string) => {
     setActionSuccessMessage(msg);
     toast.success(msg);
