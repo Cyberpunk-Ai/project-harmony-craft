@@ -104,6 +104,33 @@ export const moderateUser = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     if (!updated) throw new Error("That member no longer exists.");
 
+    // A plan granted from the console is a real, comped subscription.
+    if (data.plan !== undefined) {
+      await staff.admin.from("subscriptions").upsert(
+        {
+          user_id: data.profileId,
+          plan: data.plan,
+          status: data.plan === "free" ? "canceled" : "active",
+          provider: "manual",
+          renews_at:
+            data.plan === "free" ? null : new Date(Date.now() + 30 * 86400000).toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" },
+      );
+      await staff.admin.from("notifications").insert({
+        recipient_id: data.profileId,
+        actor_id: staff.actorId,
+        type: "system",
+        body:
+          data.plan === "free"
+            ? "Your plan was changed to Free by the Starpace team."
+            : `Your account was upgraded to ${data.plan === "pro" ? "Pro" : "Plus"} by the Starpace team.`,
+      });
+    }
+
+
+
     const what = Object.entries(patch)
       .map(([k, v]) => `${k}: ${String(v)}`)
       .join(", ");
