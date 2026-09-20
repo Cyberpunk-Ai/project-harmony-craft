@@ -60,7 +60,7 @@ async function writeAudit(
   });
 }
 
-/** Suspend, reinstate, verify or warn a member. */
+/** Suspend, reinstate, verify, warn or change the plan of a member. */
 export const moderateUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
@@ -70,6 +70,7 @@ export const moderateUser = createServerFn({ method: "POST" })
         status: z.enum(["active", "suspended", "banned"]).optional(),
         verified: z.boolean().optional(),
         warningCount: z.number().int().min(0).max(50).optional(),
+        plan: z.enum(["free", "plus", "pro"]).optional(),
       })
       .parse(input),
   )
@@ -80,12 +81,17 @@ export const moderateUser = createServerFn({ method: "POST" })
       status?: string;
       warning_count?: number;
       verified?: boolean;
+      plan?: string;
     } = {};
     if (data.status !== undefined) patch.status = data.status;
     if (data.warningCount !== undefined) patch.warning_count = data.warningCount;
     if (data.verified !== undefined) {
       if (!staff.isAdmin) throw new Error("Only administrators can change verification.");
       patch.verified = data.verified;
+    }
+    if (data.plan !== undefined) {
+      if (!staff.isAdmin) throw new Error("Only administrators can change someone's plan.");
+      patch.plan = data.plan;
     }
     if (Object.keys(patch).length === 0) throw new Error("Nothing to change.");
 

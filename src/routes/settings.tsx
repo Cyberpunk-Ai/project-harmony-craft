@@ -37,6 +37,7 @@ import { currentUser } from "@/lib/profile-service";
 import { setLoggedOut, useAuth, updateUserSession } from "@/lib/auth-state";
 import { usePlan, openUpgradeModal } from "@/lib/plan-state";
 import { useTheme, ACCENT_PALETTES, type ThemeAccent, type ThemeMode } from "@/lib/theme-state";
+import { usePreferences } from "@/lib/preferences-state";
 import { PLAN_DETAILS, type PlanTier } from "@/lib/plans";
 import { PaymentHistory } from "@/components/social/PaymentHistory";
 import { cn } from "@/lib/utils";
