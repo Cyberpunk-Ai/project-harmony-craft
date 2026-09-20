@@ -160,6 +160,33 @@ export function useTheme() {
     setSettings(getStoredThemeSettings());
   }, []);
 
+  // The signed-in account's saved look wins over whatever this device cached,
+  // so the same person sees their theme on every device.
+  useEffect(() => {
+    const adopt = () => {
+      const { status } = getPreferencesStatus();
+      if (status !== "ready") return;
+      const prefs = getPreferences();
+      const next: ThemeSettings = {
+        mode:
+          prefs.theme === "light" || prefs.theme === "dark" || prefs.theme === "system"
+            ? (prefs.theme as ThemeMode)
+            : DEFAULT_THEME.mode,
+        accent: (prefs.accent in ACCENT_PALETTES
+          ? prefs.accent
+          : DEFAULT_THEME.accent) as ThemeAccent,
+        reduceMotion: prefs.reduceMotion,
+        largerText: prefs.largerText,
+      };
+      inMemoryTheme = next;
+      persistTheme(next);
+      applyThemeToDOM(next);
+      setSettings(next);
+    };
+    adopt();
+    return subscribePreferences(adopt);
+  }, []);
+
   useEffect(() => {
     applyThemeToDOM(settings);
 
