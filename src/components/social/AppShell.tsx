@@ -17,7 +17,6 @@ import {
   X,
   Sun,
   Moon,
-  ShieldCheck,
 } from "lucide-react";
 import { Avatar } from "@/components/social/Avatar";
 import { UserBadge } from "@/components/social/UserBadge";
@@ -29,77 +28,10 @@ import { PLAN_DETAILS } from "@/lib/plans";
 import { useUnreadCounts } from "@/lib/unread-state";
 import { useTheme, ACCENT_PALETTES, type ThemeAccent } from "@/lib/theme-state";
 import { UpgradeModal } from "@/components/social/UpgradeModal";
-import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
-/** True when the signed-in person can open the admin console. */
-function useConsoleAccess() {
-  const { user } = useAuth();
-  const profile = user || currentUser;
-  const [allowed, setAllowed] = useState(
-    profile.role === "admin" ||
-    profile.role === "superadmin" ||
-    profile.role === "moderator" ||
-    (profile.email || "").toLowerCase().includes("spacesnext579") ||
-    (profile.email || "").toLowerCase().includes("admin") ||
-    profile.username === "spacesnext" ||
-    profile.username === "alexrivers" ||
-    profile.id === "user_spacesnext"
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const email = (profile.email || "").toLowerCase();
-      const username = (profile.username || "").toLowerCase();
-      const role = profile.role;
-
-      if (
-        role === "admin" ||
-        role === "superadmin" ||
-        role === "moderator" ||
-        email.includes("spacesnext579") ||
-        email.includes("admin") ||
-        username === "spacesnext" ||
-        username === "alexrivers" ||
-        profile.id === "user_spacesnext"
-      ) {
-        if (!cancelled) setAllowed(true);
-        return;
-      }
-
-      const { data } = await supabase.auth.getUser();
-      const authUser = data?.user;
-      const authEmail = (authUser?.email || "").toLowerCase();
-
-      if (authEmail.includes("spacesnext579") || authEmail.includes("admin")) {
-        if (!cancelled) setAllowed(true);
-        return;
-      }
-
-      const id = authUser?.id;
-      if (!id) {
-        if (!cancelled) setAllowed(true);
-        return;
-      }
-
-      try {
-        const [{ data: isAdmin }, { data: isMod }] = await Promise.all([
-          supabase.rpc("has_role", { _user_id: id, _role: "admin" }),
-          supabase.rpc("has_role", { _user_id: id, _role: "moderator" }),
-        ]);
-        if (!cancelled) setAllowed(Boolean(isAdmin || isMod || true));
-      } catch {
-        if (!cancelled) setAllowed(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [profile]);
-
-  return allowed;
-}
+// The admin console is reached only by going to /admin directly, and access is
+// decided there by the account's real assigned role on the server.
 
 type NavItem = {
   label: string;
@@ -157,7 +89,6 @@ function Sidebar({
   const { currentPlan, isPlus, isPro } = usePlan();
   const { user, signOut } = useAuth();
   const { isDark, toggleTheme, accent: currentAccent, setAccent } = useTheme();
-  const hasConsoleAccess = useConsoleAccess();
   const planInfo = PLAN_DETAILS[currentPlan] || PLAN_DETAILS.free;
   const activeUser = user || currentUser;
 
@@ -182,10 +113,6 @@ function Sidebar({
     { label: "Profile", to: "/profile", icon: User },
     { label: "Settings", to: "/settings", icon: Settings },
   ];
-
-  if (hasConsoleAccess) {
-    navItems.push({ label: "Admin", to: "/admin", icon: ShieldCheck });
-  }
 
   const accentKeys: ThemeAccent[] = ["violet", "amber", "emerald", "rose", "indigo"];
 

@@ -37,6 +37,7 @@ import { currentUser } from "@/lib/profile-service";
 import { setLoggedOut, useAuth, updateUserSession } from "@/lib/auth-state";
 import { usePlan, openUpgradeModal } from "@/lib/plan-state";
 import { useTheme, ACCENT_PALETTES, type ThemeAccent, type ThemeMode } from "@/lib/theme-state";
+import { usePreferences } from "@/lib/preferences-state";
 import { PLAN_DETAILS, type PlanTier } from "@/lib/plans";
 import { PaymentHistory } from "@/components/social/PaymentHistory";
 import { cn } from "@/lib/utils";
@@ -91,23 +92,22 @@ const sections: Array<{
 
 type SectionId = (typeof sections)[number]["id"];
 
-const userSettingsPrefs = new Map<string, boolean>();
-
+/**
+ * Each on/off preference is stored on the signed-in account, so it survives a
+ * refresh and follows the person to another device.
+ */
 function usePersistentToggle(key: string, defaultValue: boolean) {
-  const [val, setVal] = useState<boolean>(() => {
-    if (userSettingsPrefs.has(key)) {
-      return userSettingsPrefs.get(key)!;
-    }
-    return defaultValue;
-  });
+  const { toggle: read, setToggle } = usePreferences();
+  const val = read(key, defaultValue);
 
-  const toggle = (next: boolean) => {
-    setVal(next);
-    userSettingsPrefs.set(key, next);
-    toast.success("Preference saved");
+  const set = (next: boolean) => {
+    void setToggle(key, next).then((res) => {
+      if (res.ok) toast.success("Preference saved");
+      else toast.error(res.error || "That change didn't save. Please try again.");
+    });
   };
 
-  return [val, toggle] as const;
+  return [val, set] as const;
 }
 
 function Toggle({

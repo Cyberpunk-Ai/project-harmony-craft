@@ -1444,6 +1444,7 @@ export async function updateUserAdmin(userId: string, patch: Record<string, any>
       ...(patch["warning_count"] !== undefined
         ? { warningCount: Number(patch["warning_count"]) }
         : {}),
+      ...(patch["plan"] !== undefined ? { plan: patch["plan"] } : {}),
     },
   });
   const profile = data ? rowToProfile(data) : null;

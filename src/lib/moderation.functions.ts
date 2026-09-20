@@ -60,7 +60,7 @@ async function writeAudit(
   });
 }
 
-/** Suspend, reinstate, verify or warn a member. */
+/** Suspend, reinstate, verify, warn or change the plan of a member. */
 export const moderateUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
@@ -70,6 +70,7 @@ export const moderateUser = createServerFn({ method: "POST" })
         status: z.enum(["active", "suspended", "banned"]).optional(),
         verified: z.boolean().optional(),
         warningCount: z.number().int().min(0).max(50).optional(),
+        plan: z.enum(["free", "plus", "pro"]).optional(),
       })
       .parse(input),
   )
@@ -80,12 +81,17 @@ export const moderateUser = createServerFn({ method: "POST" })
       status?: string;
       warning_count?: number;
       verified?: boolean;
+      plan?: string;
     } = {};
     if (data.status !== undefined) patch.status = data.status;
     if (data.warningCount !== undefined) patch.warning_count = data.warningCount;
     if (data.verified !== undefined) {
       if (!staff.isAdmin) throw new Error("Only administrators can change verification.");
       patch.verified = data.verified;
+    }
+    if (data.plan !== undefined) {
+      if (!staff.isAdmin) throw new Error("Only administrators can change someone's plan.");
+      patch.plan = data.plan;
     }
     if (Object.keys(patch).length === 0) throw new Error("Nothing to change.");
 
@@ -97,6 +103,33 @@ export const moderateUser = createServerFn({ method: "POST" })
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!updated) throw new Error("That member no longer exists.");
+
+    // A plan granted from the console is a real, comped subscription.
+    if (data.plan !== undefined) {
+      await staff.admin.from("subscriptions").upsert(
+        {
+          user_id: data.profileId,
+          plan: data.plan,
+          status: data.plan === "free" ? "canceled" : "active",
+          provider: "manual",
+          renews_at:
+            data.plan === "free" ? null : new Date(Date.now() + 30 * 86400000).toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" },
+      );
+      await staff.admin.from("notifications").insert({
+        recipient_id: data.profileId,
+        actor_id: staff.actorId,
+        type: "system",
+        body:
+          data.plan === "free"
+            ? "Your plan was changed to Free by the Starpace team."
+            : `Your account was upgraded to ${data.plan === "pro" ? "Pro" : "Plus"} by the Starpace team.`,
+      });
+    }
+
+
 
     const what = Object.entries(patch)
       .map(([k, v]) => `${k}: ${String(v)}`)
