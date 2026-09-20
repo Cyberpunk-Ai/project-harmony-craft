@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 
+import {
+  getPreferences,
+  getPreferencesStatus,
+  savePreferences,
+  subscribePreferences,
+} from "@/lib/preferences-state";
+
 export type ThemeMode = "light" | "dark" | "system";
 export type ThemeAccent = "violet" | "amber" | "emerald" | "rose" | "indigo";
 
@@ -234,6 +241,12 @@ export function useTheme() {
       inMemoryTheme = next;
       persistTheme(next);
       applyThemeToDOM(next);
+      void savePreferences({
+        theme: next.mode,
+        accent: next.accent,
+        reduceMotion: next.reduceMotion,
+        largerText: next.largerText,
+      });
       return next;
     });
     queueMicrotask(() => {
@@ -254,6 +267,7 @@ export function useTheme() {
       inMemoryTheme = next;
       persistTheme(next);
       applyThemeToDOM(next);
+      void savePreferences({ theme: next.mode });
       return next;
     });
     queueMicrotask(() => {
