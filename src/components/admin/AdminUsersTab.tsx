@@ -368,6 +368,19 @@ export function AdminUsersTab({ activeRole, currentUserId }: AdminUsersTabProps)
                       {/* Moderation Actions */}
                       <td className="px-5 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {canManageRoles && (
+                            <select
+                              value={user.plan || "free"}
+                              onChange={(e) => handlePlanChange(user, e.target.value)}
+                              aria-label={`Plan for @${user.username}`}
+                              title="Change this member's plan"
+                              className="rounded-xl border border-border bg-card px-2 py-1 text-[0.7rem] font-bold text-foreground"
+                            >
+                              <option value="free">Free</option>
+                              <option value="plus">Plus</option>
+                              <option value="pro">Pro</option>
+                            </select>
+                          )}
                           {canBanUsers && user.status !== "banned" && (
                             <button
                               onClick={() => handleUpdateStatus(user.id, "banned")}
